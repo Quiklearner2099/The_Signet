@@ -4,6 +4,9 @@
 
 <h2>BIG BROTHER IS WATCHING YOU…<br/>Send him a message.</h2>
 
+[![License: MIT](https://img.shields.io/badge/Software-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License: CERN-OHL-P-2.0](https://img.shields.io/badge/Hardware-CERN--OHL--P%202.0-blue.svg)](https://ohwr.org/cern_ohl_p_v2.txt)
+
 <p>
   <font color="#d73a49"><strong>The Signet</strong> — A Morse Beacon for Protest Messaging / Video Steganography
 </p>
