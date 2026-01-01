@@ -2,10 +2,13 @@
 
 <h1>The Signet</h1>
 
-<h2>BIG BROTHER IS WATCHING YOU…<br/>Send him a message.</h2>
-
+[![GitHub release](https://img.shields.io/github/v/release/Quiklearner2099/The_Signet)](https://github.com/Quiklearner2099/The_Signet/releases)
+[![Arduino](https://img.shields.io/badge/Platform-Arduino-00979D.svg)](https://www.arduino.cc/)
+[![ESP32-C6](https://img.shields.io/badge/MCU-ESP32--C6-red.svg)](https://www.espressif.com/)
 [![License: MIT](https://img.shields.io/badge/Software-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![License: CERN-OHL-P-2.0](https://img.shields.io/badge/Hardware-CERN--OHL--P%202.0-blue.svg)](https://ohwr.org/cern_ohl_p_v2.txt)
+
+<h2>BIG BROTHER IS WATCHING YOU…<br/>Send him a message.</h2>
 
 <p>
   <font color="#d73a49"><strong>The Signet</strong> — A Morse Beacon for Protest Messaging / Video Steganography
