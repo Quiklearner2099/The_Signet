@@ -46,7 +46,7 @@
   PIN CONFIGURATION: for Seeed Studios ESP32-C6
   ===================================================================================
   PIN_RGB      D5    - WS2812B RGB LED data
-  PIN_IR       D8    - IR LED driver (via NTD3528I8)
+  PIN_IR       D8    - IR LED PWM drive
   PIN_SLEEP_SW D2    - Sleep switch (SPST to GND)
 
   ===================================================================================
