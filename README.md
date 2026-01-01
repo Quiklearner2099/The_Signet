@@ -176,3 +176,9 @@
   It must not be used to enable harm, harassment, intimidation, illegal activity,
   or to mislead people about what is being recorded or communicated.
 </p>
+
+## Support This Project
+
+<a href="https://www.buymeacoffee.com/Quiklearner2099" target="_blank">
+  <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" height="50">
+</a>
