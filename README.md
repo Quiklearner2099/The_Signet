@@ -10,6 +10,9 @@
 
 <h2>BIG BROTHER IS WATCHING YOU…<br/>Send him a message.</h2>
 
+[![Steganography](https://img.shields.io/badge/Steganography-Morse%20Code-purple.svg)]()
+[![Free Speech](https://img.shields.io/badge/Free%20Speech-Tool-1DA1F2.svg)]()
+
 <p>
   <font color="#d73a49"><strong>The Signet</strong> — A Morse Beacon for Protest Messaging / Video Steganography
 </p>
