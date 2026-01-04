@@ -1,8 +1,8 @@
 /*
   ===================================================================================
   The Signet Morse Beacon
-  Version: 1.0.0
-  Release Date: January 1, 2026
+  Version: 1.0.2
+  Release Date: January 3, 2026
   ===================================================================================
 
   DESCRIPTION:
@@ -16,6 +16,7 @@
   - SSID: "The_Signet_XXXXXX" (XXXXXX = Last 3 bytes of MAC Address)
   - RGB & IR LED
   - Morse Code Playback with configurable intensity
+  - Adjustable Morse speed (5-20 WPM)
   - 90-second idle WiFi AP timeout to conserve power
 
   HARDWARE:
@@ -40,6 +41,8 @@
   VERSION HISTORY:
   ===================================================================================
   
+  v1.0.2 (January 3, 2026) - Compact mobile-friendly UI
+  v1.0.1 (January 2, 2026) - Added adjustable Morse speed (WPM)
   v1.0.0 (January 1, 2026) - Initial Stable Release
 
   ===================================================================================
@@ -63,8 +66,8 @@
 #include "esp_mac.h"   // esp_read_mac()
 
 // -------------------- Version Information --------------------
-#define FIRMWARE_VERSION "1.0.0"
-#define FIRMWARE_DATE    "JANUARY 1 2026"
+#define FIRMWARE_VERSION "1.0.2"
+#define FIRMWARE_DATE    "JANUARY 3 2026"
 
 // -------------------- Forward Declarations --------------------
 enum Mode     { DISCREET = 0, VISIBLE = 1 };
@@ -180,6 +183,7 @@ struct AppState {
   volatile ColorSel color = C_RED;
   volatile Intensity intensity = I_MED;
   volatile bool dazzle = false;
+  volatile uint8_t wpm = 10;  // Words per minute (5-20 range)
   String text = "S O S";
   volatile bool playing = false;
 } state;
@@ -230,9 +234,21 @@ CRGB colorValue(ColorSel c) {
   }
 }
 
-// -------------------- Morse Definitions -------------------
-const uint32_t UNIT=160, DOT=UNIT, DASH=3*UNIT, GAP_INTRA=UNIT, GAP_LETTER=3*UNIT, GAP_WORD=7*UNIT;
-const uint32_t DISCREET_LOOP_GAP=2000, VISIBLE_DAZZLE_OFF1=750, VISIBLE_DAZZLE_OFF2=750, VISIBLE_DAZZLE_FLASH=500;
+// -------------------- Morse Timing (WPM-based) -------------------
+// Standard "PARIS" timing: dit duration = 1200 / WPM (in ms)
+// All other timings are multiples of the dit duration
+
+uint32_t ditDuration()  { return 1200 / state.wpm; }
+uint32_t dahDuration()  { return 3 * ditDuration(); }
+uint32_t gapIntra()     { return ditDuration(); }         // Between dits/dahs in same letter
+uint32_t gapLetter()    { return 3 * ditDuration(); }     // Between letters
+uint32_t gapWord()      { return 7 * ditDuration(); }     // Between words
+
+// Fixed loop gap timings (not WPM-dependent)
+const uint32_t LOOP_GAP = 2000;
+const uint32_t VISIBLE_DAZZLE_OFF1 = 750;
+const uint32_t VISIBLE_DAZZLE_OFF2 = 750;
+const uint32_t VISIBLE_DAZZLE_FLASH = 500;
 
 struct MorseEntry { char ch; const char* code; };
 const MorseEntry MORSE[] = {
@@ -275,7 +291,7 @@ TaskHandle_t morseTaskHandle = nullptr;
 inline void morseDelay(uint32_t ms) { vTaskDelay(pdMS_TO_TICKS(ms)); }
 
 void playSymbol(char s) {
-  uint32_t onMs = (s == '.') ? DOT : DASH;
+  uint32_t onMs = (s == '.') ? ditDuration() : dahDuration();
   activeLedOn();
   morseDelay(onMs);
   
@@ -290,7 +306,7 @@ void playLetter(const char* code) {
       return;
     }
     playSymbol(code[i]);
-    if (code[i+1]) morseDelay(GAP_INTRA);
+    if (code[i+1]) morseDelay(gapIntra());
   }
 }
 
@@ -326,14 +342,14 @@ void morseTask(void*) {
       for (size_t i=0; i<msg.length() && state.playing; i++) {
         char c = msg[i];
         if (c == ' ') {
-          morseDelay(GAP_WORD);
+          morseDelay(gapWord());
           continue;
         }
         const char* code = lookupMorse(c);
         if (code) {
           playLetter(code);
           if (!state.playing) break;
-          morseDelay(GAP_LETTER);
+          morseDelay(gapLetter());
         }
       }
 
@@ -342,10 +358,10 @@ void morseTask(void*) {
       if (state.mode == DISCREET) {
        
         allOff();
-        morseDelay(DISCREET_LOOP_GAP);
+        morseDelay(LOOP_GAP);
       } else {
         if (state.dazzle) doDazzleGap();
-        else { activeLedOff(); morseDelay(DISCREET_LOOP_GAP); }
+        else { activeLedOff(); morseDelay(LOOP_GAP); }
       }
     }
     allOff();
@@ -359,39 +375,45 @@ static const char INDEX_HTML[] PROGMEM = R"====(
 <title>The Signet Morse Beacon</title>
 <style>
 :root{--bg:#121212;--card:#1E1E1E;--text:#ECECEC;--muted:#B0B0B0;--accent:#8AB4F8;--primary:#8AB4F8}
-*{box-sizing:border-box;font-family:Inter,system-ui,Segoe UI,Roboto,Arial,sans-serif}
-body{margin:0;background:var(--bg);color:var(--text)}
-.wrap{max-width:820px;margin:0 auto;padding:20px}
-.appbar{display:flex;justify-content:center;position:sticky;top:0;background:#0D0D0D;padding:14px 20px;border-bottom:1px solid #222}
-.title{text-align:center;font-size:18px;font-weight:600;letter-spacing:.3px}
-.grid{display:grid;gap:16px;margin-top:16px;grid-template-columns:1fr}
-@media(min-width:720px){.grid{grid-template-columns:1fr 1fr}}
-.card{background:var(--card);border:1px solid #2A2A2A;border-radius:16px;padding:16px;box-shadow:0 4px 16px rgba(0,0,0,.35)}
-.card h3{text-align:center;margin:.2rem 0 1rem 0;font-size:16px;font-weight:600;color:#ddd}
-.row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
-.row.center{justify-content:center}
-.center-text{text-align:center}
-.pill{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border-radius:999px;background:#151515;border:1px solid #2A2A2A;cursor:pointer;user-select:none}
-.pill input{accent-color:var(--accent)}
-button{border:0;border-radius:12px;padding:10px 14px;background:var(--primary);color:#000;font-weight:700;cursor:pointer}
-button.ghost{background:transparent;color:#fff;border:1px solid #333}
-button:disabled,.disabled{opacity:.45;pointer-events:none}
-.seg{display:flex;gap:8px}
-.seg.center{justify-content:center}
-.seg button{background:#171717;border:1px solid #2A2A2A;color:#ddd}
+*{box-sizing:border-box;font-family:Inter,system-ui,Segoe UI,Roboto,Arial,sans-serif;margin:0;padding:0}
+body{background:var(--bg);color:var(--text)}
+.wrap{max-width:420px;margin:0 auto;padding:10px}
+.appbar{text-align:center;padding:10px;font-size:15px;font-weight:600;color:#ddd;border-bottom:1px solid #222}
+.grid{display:flex;flex-direction:column;gap:10px;margin-top:10px}
+.row-2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.card{background:var(--card);border:1px solid #2A2A2A;border-radius:12px;padding:12px}
+.card h3{font-size:11px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px}
+.seg{display:flex;gap:6px}
+.seg button{flex:1;border:0;border-radius:8px;padding:8px 4px;background:#171717;border:1px solid #2A2A2A;color:#ddd;font-size:12px;font-weight:500;cursor:pointer}
 .seg button.active{background:var(--accent);color:#000;border-color:var(--accent)}
-.color{width:34px;height:34px;border-radius:10px;border:1px solid #2A2A2A;cursor:pointer;opacity:.9}
-.color.active{outline:2px solid var(--accent);opacity:1}
+.color-row{display:flex;gap:8px;align-items:center}
+.color{width:28px;height:28px;border-radius:8px;border:1px solid #2A2A2A;cursor:pointer}
+.color.active{outline:2px solid var(--accent)}
 .color.red{background:#f44336}.color.green{background:#4caf50}.color.blue{background:#2196f3}
-.muted{color:var(--muted);font-size:12px}
-input[type="text"]{width:100%;background:#151515;border:1px solid #2A2A2A;border-radius:12px;padding:12px;color:#eee;outline:none}
-.footer{margin-top:8px;color:#777;font-size:12px}
-.switch{position:relative;display:inline-block;width:52px;height:28px}
+.dazzle-row{display:flex;align-items:center;gap:8px}
+.dazzle-row span{font-size:11px;color:var(--muted)}
+.switch{position:relative;width:44px;height:24px}
 .switch input{display:none}
-.slider{position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background:#333;border:1px solid #444;transition:.2s;border-radius:999px}
-.slider:before{position:absolute;content:"";height:22px;width:22px;left:3px;bottom:2px;background:#bbb;transition:.2s;border-radius:50%}
-input:checked + .slider{background:var(--accent);border-color:var(--accent)}
-input:checked + .slider:before{transform:translateX(23px);background:#111}
+.slider{position:absolute;cursor:pointer;inset:0;background:#333;border-radius:999px;transition:.2s}
+.slider:before{content:"";position:absolute;height:18px;width:18px;left:3px;bottom:3px;background:#bbb;border-radius:50%;transition:.2s}
+input:checked + .slider{background:var(--accent)}
+input:checked + .slider:before{transform:translateX(20px);background:#111}
+.wpm-row{display:flex;align-items:center;gap:12px}
+.wpm-val{font-size:22px;font-weight:700;color:var(--accent);min-width:60px}
+.wpm-val small{font-size:11px;color:var(--muted);font-weight:400}
+.wpm-slider{flex:1}
+.wpm-slider input[type="range"]{-webkit-appearance:none;width:100%;height:6px;border-radius:3px;background:#333}
+.wpm-slider input[type="range"]::-webkit-slider-thumb{-webkit-appearance:none;width:20px;height:20px;border-radius:50%;background:var(--accent);cursor:pointer;border:2px solid #222}
+.wpm-slider input[type="range"]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;background:var(--accent);cursor:pointer;border:2px solid #222}
+.wpm-labels{display:flex;justify-content:space-between;font-size:9px;color:#666;margin-top:4px;padding:0 2px}
+.msg-input{width:100%;background:#151515;border:1px solid #2A2A2A;border-radius:10px;padding:10px;color:#eee;font-size:14px;outline:none}
+.msg-hint{font-size:10px;color:#fff;margin:6px 0;text-align:center}
+.btn-row{display:flex;gap:8px;margin-top:8px}
+.btn-row button{flex:1;border:0;border-radius:10px;padding:10px;font-weight:700;font-size:13px;cursor:pointer}
+.btn-row .play{background:var(--primary);color:#000}
+.btn-row .stop{background:transparent;color:#fff;border:1px solid #333}
+.status{text-align:center;font-size:11px;color:#666;margin-top:6px}
+.footer{text-align:center;font-size:10px;color:#FFD700;font-weight:700;margin-top:10px}
 #splash{position:fixed;inset:0;background:rgba(0,0,0,.92);display:flex;align-items:center;justify-content:center;z-index:9999;opacity:0;pointer-events:none;transition:opacity .3s}
 #splash.visible{opacity:1;pointer-events:auto}
 #splash img{max-width:90vw;max-height:90vh;border-radius:12px;box-shadow:0 0 40px rgba(0,0,0,.7)}
@@ -401,57 +423,70 @@ input:checked + .slider:before{transform:translateX(23px);background:#111}
 
 <div id="splash"><img src="/bb.jpg" alt="Big Brother"></div>
 
-<div class="appbar"><span class="title">The Signet Morse Beacon</span></div>
+<div class="appbar">The Signet Morse Beacon</div>
 <div class="wrap">
 <div class="grid">
 
   <div class="card">
-    <h3>Mode</h3>
-    <div class="seg center" id="modeGroup">
-      <button data-mode="DISCREET">Discreet (IR)</button>
-      <button data-mode="VISIBLE">Visible (RGB)</button>
+    <h3>Message</h3>
+    <input type="text" class="msg-input" id="msg" placeholder="S O S" maxlength="64">
+    <div class="msg-hint">A-Z a-z 0-9 . , ? / - ( ) @ = space</div>
+    <div class="btn-row">
+      <button class="play" id="play">&#9654; Play</button>
+      <button class="stop" id="stop">&#9632; Stop</button>
+    </div>
+    <div class="status" id="status">Idle</div>
+  </div>
+
+  <div class="row-2">
+    <div class="card">
+      <h3>Mode</h3>
+      <div class="seg" id="modeGroup">
+        <button data-mode="DISCREET">IR</button>
+        <button data-mode="VISIBLE">RGB</button>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Intensity</h3>
+      <div class="seg" id="intensityGroup">
+        <button data-int="LOW">Lo</button>
+        <button data-int="MED">Med</button>
+        <button data-int="HIGH">Hi</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="row-2">
+    <div class="card" id="colorCard">
+      <h3>Color</h3>
+      <div class="color-row" id="colorGroup">
+        <div class="color red" data-color="RED"></div>
+        <div class="color green" data-color="GREEN"></div>
+        <div class="color blue" data-color="BLUE"></div>
+      </div>
+    </div>
+    <div class="card" id="dazzleCard">
+      <h3>Dazzle</h3>
+      <div class="dazzle-row">
+        <label class="switch"><input type="checkbox" id="dazzle"><span class="slider"></span></label>
+        <span>RGB flash</span>
+      </div>
     </div>
   </div>
 
   <div class="card">
-    <h3>Intensity</h3>
-    <div class="seg center" id="intensityGroup">
-      <button data-int="LOW">Low</button>
-      <button data-int="MED">Med</button>
-      <button data-int="HIGH">High</button>
+    <h3>Speed</h3>
+    <div class="wpm-row">
+      <div class="wpm-val"><span id="wpmDisplay">10</span> <small>WPM</small></div>
+      <div class="wpm-slider">
+        <input type="range" id="wpm" min="5" max="20" step="5" value="10">
+        <div class="wpm-labels"><span>5</span><span>10</span><span>15</span><span>20</span></div>
+      </div>
     </div>
-  </div>
-
-  <div class="card" id="colorCard">
-    <h3>Color (Visible mode)</h3>
-    <div class="row center" id="colorGroup">
-      <div class="color red" data-color="RED"></div>
-      <div class="color green" data-color="GREEN"></div>
-      <div class="color blue" data-color="BLUE"></div>
-    </div>
-  </div>
-
-  <div class="card" id="dazzleCard">
-    <h3>Dazzle Effect</h3>
-    <div class="row center">
-      <label class="switch"><input type="checkbox" id="dazzle"><span class="slider"></span></label>
-      <span class="muted">RGB flash between loops</span>
-    </div>
-  </div>
-
-  <div class="card" style="grid-column:1/-1">
-    <h3>Message</h3>
-    <input type="text" id="msg" placeholder="S O S" maxlength="64">
-    <p class="muted center-text" style="margin-top:6px">Letters, numbers, spaces. Use space for word gap.</p>
-    <div class="row center" style="margin-top:14px">
-      <button id="play">&#9654; Play</button>
-      <button id="stop" class="ghost">&#9632; Stop</button>
-    </div>
-    <p class="muted center-text" style="margin-top:8px" id="status">Idle</p>
   </div>
 
 </div>
-<p class="footer center-text">1984 was not an instruction manual</p>
+<div class="footer">1984 was not an instruction manual</div>
 </div>
 
 <script>
@@ -461,6 +496,8 @@ const ui = {
   ints: document.querySelectorAll('#intensityGroup button'),
   colors: document.querySelectorAll('#colorGroup .color'),
   dazzle: document.getElementById('dazzle'),
+  wpm: document.getElementById('wpm'),
+  wpmDisplay: document.getElementById('wpmDisplay'),
   msg: document.getElementById('msg'),
   play: document.getElementById('play'),
   stop: document.getElementById('stop'),
@@ -484,7 +521,12 @@ async function getState() {
     ui.ints.forEach(b => b.classList.toggle('active', b.dataset.int === s.intensity));
     ui.colors.forEach(c => c.classList.toggle('active', c.dataset.color === s.color));
     ui.dazzle.checked = s.dazzle;
-    // Only update text field if user is NOT currently typing in it
+    
+    if (s.wpm) {
+      ui.wpm.value = s.wpm;
+      ui.wpmDisplay.textContent = s.wpm;
+    }
+    
     if (s.text && document.activeElement !== ui.msg) ui.msg.value = s.text;
     ui.status.textContent = s.playing ? 'Playing…' : 'Idle';
 
@@ -508,6 +550,14 @@ ui.colors.forEach(c => c.addEventListener('click', async ()=>{
   await post('/api/update', { color: c.dataset.color });
 }));
 ui.dazzle.addEventListener('change', async ()=>{ await post('/api/update', { dazzle: ui.dazzle.checked }); });
+
+ui.wpm.addEventListener('input', ()=>{
+  ui.wpmDisplay.textContent = ui.wpm.value;
+});
+ui.wpm.addEventListener('change', async ()=>{
+  await post('/api/update', { wpm: parseInt(ui.wpm.value) });
+});
+
 ui.play.addEventListener('click', async ()=>{ await post('/api/play', { text: ui.msg.value || '' }); ui.status.textContent = 'Playing…'; });
 ui.stop.addEventListener('click', async ()=>{ await post('/api/stop'); ui.status.textContent = 'Idle'; });
 
@@ -604,6 +654,7 @@ void handleState(){
   doc["intensity"]= intensityToStr(state.intensity);
   doc["color"]    = colorToStr(state.color);
   doc["dazzle"]   = state.dazzle;
+  doc["wpm"]      = state.wpm;
   // FIX: Thread-safe access to text
   doc["text"]     = getTextCopy();
   doc["playing"]  = state.playing;
@@ -631,6 +682,13 @@ void handleUpdate(){
     }
     if (doc.containsKey("color"))     state.color     = strToColor(doc["color"].as<String>());
     if (doc.containsKey("dazzle"))    state.dazzle    = doc["dazzle"].as<bool>();
+    if (doc.containsKey("wpm")) {
+      int newWpm = doc["wpm"].as<int>();
+      // Clamp to valid range (5-20)
+      if (newWpm < 5) newWpm = 5;
+      if (newWpm > 20) newWpm = 20;
+      state.wpm = (uint8_t)newWpm;
+    }
   }
   server.send(200, "application/json", "{\"ok\":true}");
 }
@@ -699,18 +757,18 @@ void readyBlink(){
 
 // -------------------- Setup / Loop -----------------------
 void setup(){
-  //delay(100);
-  //Serial.begin(115200);
+  delay(100);
+  Serial.begin(115200);
   
   // Print startup banner
-  //Serial.println();
-  //Serial.println("===========================================");
-  //Serial.println("  The Signet Morse Beacon");
-  //Serial.printf("  Firmware Version: %s\n", FIRMWARE_VERSION);
-  //Serial.printf("  Build Date: %s\n", FIRMWARE_DATE);
-  //Serial.println("  (c) 2025 Cunths & Queeths LLC");
-  //Serial.println("===========================================");
-  //Serial.println();
+  Serial.println();
+  Serial.println("===========================================");
+  Serial.println("  The Signet Morse Beacon");
+  Serial.printf("  Firmware Version: %s\n", FIRMWARE_VERSION);
+  Serial.printf("  Build Date: %s\n", FIRMWARE_DATE);
+  Serial.println("  (c) 2025 Cunths & Queeths LLC");
+  Serial.println("===========================================");
+  Serial.println();
 
   // Sleep switch first
   pinMode(PIN_SLEEP_SW, INPUT_PULLUP);
