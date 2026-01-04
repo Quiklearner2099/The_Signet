@@ -22,7 +22,7 @@
   - Seeed Studios XIAO ESP32-C6 Module (other ESP32s can be used)
   - WS2812B RGB LED
   - IR LED
-  - 10 Ohm resisitor
+  - 10 Ohm resistor
   - 270 Ohm resistor
   - 47k Ohm resistor
   - 100k Ohm resistor
