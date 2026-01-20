@@ -42,7 +42,7 @@
   ===================================================================================
 
   v1.0.3 (January 19, 2026) - Blue pulsing LED indicates WiFi AP ready, 4 rapid blinks
-                              confirm Web UI connection
+                              confirm Web UI connection, custom color wheel picker
   v1.0.2 (January 3, 2026) - Compact mobile-friendly UI
   v1.0.1 (January 2, 2026) - Added adjustable Morse speed (WPM)
   v1.0.0 (January 1, 2026) - Initial Stable Release
