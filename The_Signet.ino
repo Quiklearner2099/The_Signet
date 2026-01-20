@@ -1,8 +1,8 @@
 /*
   ===================================================================================
   The Signet Morse Beacon
-  Version: 1.0.2
-  Release Date: January 3, 2026
+  Version: 1.0.3
+  Release Date: January 19, 2026
   ===================================================================================
 
   DESCRIPTION:
@@ -40,7 +40,9 @@
   ===================================================================================
   VERSION HISTORY:
   ===================================================================================
-  
+
+  v1.0.3 (January 19, 2026) - Blue pulsing LED indicates WiFi AP ready, 4 rapid blinks
+                              confirm Web UI connection
   v1.0.2 (January 3, 2026) - Compact mobile-friendly UI
   v1.0.1 (January 2, 2026) - Added adjustable Morse speed (WPM)
   v1.0.0 (January 1, 2026) - Initial Stable Release
@@ -66,12 +68,12 @@
 #include "esp_mac.h"   // esp_read_mac()
 
 // -------------------- Version Information --------------------
-#define FIRMWARE_VERSION "1.0.2"
-#define FIRMWARE_DATE    "JANUARY 3 2026"
+#define FIRMWARE_VERSION "1.0.3"
+#define FIRMWARE_DATE    "JANUARY 19 2026"
 
 // -------------------- Forward Declarations --------------------
 enum Mode     { DISCREET = 0, VISIBLE = 1 };
-enum ColorSel { C_RED = 0, C_GREEN = 1, C_BLUE = 2 };
+enum ColorSel { C_RED = 0, C_GREEN = 1, C_BLUE = 2, C_CUSTOM = 3 };
 enum Intensity{ I_LOW = 0, I_MED = 1, I_HIGH = 2 };
 
 uint8_t  rgbBrightnessFor(Intensity i);
@@ -93,7 +95,8 @@ void handleStop();
 void handleNotFound();
 
 bool  captivePortal();
-void  readyBlink();
+void  updateBluePulse();
+void  connectionConfirmBlink();
 void  goToDeepSleep();
 
 // -------------------- Pins & Hardware --------------------
@@ -137,6 +140,13 @@ unsigned long lastActivityMs = 0;
 bool apRunning = false;
 
 inline void noteActivity() { lastActivityMs = millis(); }
+
+// -------------------- UI Connection State & Blue Pulse --------------------
+volatile bool uiServed = false;              // True once Web UI has been served
+static uint8_t pulseState = 10;              // Current brightness (10-90)
+static int8_t pulseDirection = 5;            // Direction and step size
+static unsigned long lastPulseMs = 0;
+const unsigned long PULSE_INTERVAL_MS = 30;  // Update every 30ms for smooth breathing
 
 // -------------------- Servers -----------------------------
 WebServer server(80);
@@ -184,6 +194,9 @@ struct AppState {
   volatile Intensity intensity = I_MED;
   volatile bool dazzle = false;
   volatile uint8_t wpm = 10;  // Words per minute (5-20 range)
+  volatile uint8_t customR = 255;  // Custom color RGB components
+  volatile uint8_t customG = 0;
+  volatile uint8_t customB = 255;  // Default: magenta
   String text = "S O S";
   volatile bool playing = false;
 } state;
@@ -227,10 +240,11 @@ uint8_t irDutyFor(Intensity i) {
 
 CRGB colorValue(ColorSel c) {
   switch (c) {
-    case C_RED:   return CRGB(128,0,0);
-    case C_GREEN: return CRGB(0,128,0);
-    case C_BLUE:  return CRGB(0,0,128);
-    default:      return CRGB(128,0,0);
+    case C_RED:    return CRGB(128,0,0);
+    case C_GREEN:  return CRGB(0,128,0);
+    case C_BLUE:   return CRGB(0,0,128);
+    case C_CUSTOM: return CRGB(state.customR, state.customG, state.customB);
+    default:       return CRGB(128,0,0);
   }
 }
 
@@ -390,6 +404,12 @@ body{background:var(--bg);color:var(--text)}
 .color{width:28px;height:28px;border-radius:8px;border:1px solid #2A2A2A;cursor:pointer}
 .color.active{outline:2px solid var(--accent)}
 .color.red{background:#f44336}.color.green{background:#4caf50}.color.blue{background:#2196f3}
+.color.custom{background:linear-gradient(135deg,#f44,#ff0,#0f0,#0ff,#00f,#f0f,#f44);position:relative}
+.color-picker-wrap{display:none;margin-top:8px;text-align:center}
+.color-picker-wrap.visible{display:block}
+#wheelCanvas{cursor:crosshair;border-radius:50%}
+#briSlider{width:80px;margin-top:6px;-webkit-appearance:none;height:6px;border-radius:3px;background:linear-gradient(to right,#000,#fff)}
+#briSlider::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;border-radius:50%;background:var(--accent);cursor:pointer;border:2px solid #222}
 .dazzle-row{display:flex;align-items:center;gap:8px}
 .dazzle-row span{font-size:11px;color:var(--muted)}
 .switch{position:relative;width:44px;height:24px}
@@ -463,6 +483,11 @@ input:checked + .slider:before{transform:translateX(20px);background:#111}
         <div class="color red" data-color="RED"></div>
         <div class="color green" data-color="GREEN"></div>
         <div class="color blue" data-color="BLUE"></div>
+        <div class="color custom" data-color="CUSTOM" id="customSwatch"></div>
+      </div>
+      <div class="color-picker-wrap" id="pickerWrap">
+        <canvas id="wheelCanvas" width="80" height="80"></canvas><br>
+        <input type="range" id="briSlider" min="20" max="100" value="50">
       </div>
     </div>
     <div class="card" id="dazzleCard">
@@ -503,7 +528,11 @@ const ui = {
   stop: document.getElementById('stop'),
   status: document.getElementById('status'),
   colorCard: document.getElementById('colorCard'),
-  dazzleCard: document.getElementById('dazzleCard')
+  dazzleCard: document.getElementById('dazzleCard'),
+  wheelCanvas: document.getElementById('wheelCanvas'),
+  briSlider: document.getElementById('briSlider'),
+  pickerWrap: document.getElementById('pickerWrap'),
+  customSwatch: document.getElementById('customSwatch')
 };
 
 async function post(url, body) {
@@ -513,6 +542,11 @@ async function post(url, body) {
   } catch(e) { console.error(e); }
 }
 
+let wheelHue=0,wheelBri=50;
+function hslToRgb(h,s,l){s/=100;l/=100;const k=n=>(n+h/30)%12;const a=s*Math.min(l,1-l);const f=n=>l-a*Math.max(-1,Math.min(k(n)-3,Math.min(9-k(n),1)));return{r:Math.round(f(0)*255),g:Math.round(f(8)*255),b:Math.round(f(4)*255)};}
+function drawWheel(){const c=ui.wheelCanvas,ctx=c.getContext('2d'),cx=c.width/2,cy=c.height/2,r=cx-2;for(let a=0;a<360;a++){ctx.beginPath();ctx.moveTo(cx,cy);ctx.arc(cx,cy,r,a*Math.PI/180,(a+2)*Math.PI/180);ctx.closePath();ctx.fillStyle='hsl('+a+',100%,'+wheelBri+'%)';ctx.fill();}}
+function pickFromWheel(e){const c=ui.wheelCanvas,rect=c.getBoundingClientRect(),x=e.clientX-rect.left-c.width/2,y=e.clientY-rect.top-c.height/2,d=Math.sqrt(x*x+y*y);if(d>c.width/2)return null;let a=Math.atan2(y,x)*180/Math.PI;if(a<0)a+=360;return Math.round(a);}
+
 async function getState() {
   try {
     const r = await fetch('/api/state');
@@ -521,12 +555,21 @@ async function getState() {
     ui.ints.forEach(b => b.classList.toggle('active', b.dataset.int === s.intensity));
     ui.colors.forEach(c => c.classList.toggle('active', c.dataset.color === s.color));
     ui.dazzle.checked = s.dazzle;
-    
+
     if (s.wpm) {
       ui.wpm.value = s.wpm;
       ui.wpmDisplay.textContent = s.wpm;
     }
-    
+
+    // Update custom color swatch
+    if (s.customR !== undefined) {
+      const rgb = 'rgb('+s.customR+','+s.customG+','+s.customB+')';
+      ui.customSwatch.style.background = rgb;
+    }
+
+    // Show/hide picker based on custom selection
+    ui.pickerWrap.classList.toggle('visible', s.color === 'CUSTOM');
+
     if (s.text && document.activeElement !== ui.msg) ui.msg.value = s.text;
     ui.status.textContent = s.playing ? 'Playing…' : 'Idle';
 
@@ -547,8 +590,23 @@ ui.ints.forEach(b => b.addEventListener('click', async ()=>{
 }));
 ui.colors.forEach(c => c.addEventListener('click', async ()=>{
   ui.colors.forEach(x=>x.classList.remove('active')); c.classList.add('active');
+  const isCustom = c.dataset.color === 'CUSTOM';
+  ui.pickerWrap.classList.toggle('visible', isCustom);
+  if(isCustom)drawWheel();
   await post('/api/update', { color: c.dataset.color });
 }));
+ui.wheelCanvas.addEventListener('click', async (e)=>{
+  const h=pickFromWheel(e);if(h===null)return;wheelHue=h;
+  const rgb=hslToRgb(wheelHue,100,wheelBri);
+  ui.customSwatch.style.background='rgb('+rgb.r+','+rgb.g+','+rgb.b+')';
+  await post('/api/update',{customR:rgb.r,customG:rgb.g,customB:rgb.b});
+});
+ui.briSlider.addEventListener('input',()=>{wheelBri=parseInt(ui.briSlider.value);drawWheel();});
+ui.briSlider.addEventListener('change', async ()=>{
+  const rgb=hslToRgb(wheelHue,100,wheelBri);
+  ui.customSwatch.style.background='rgb('+rgb.r+','+rgb.g+','+rgb.b+')';
+  await post('/api/update',{customR:rgb.r,customG:rgb.g,customB:rgb.b});
+});
 ui.dazzle.addEventListener('change', async ()=>{ await post('/api/update', { dazzle: ui.dazzle.checked }); });
 
 ui.wpm.addEventListener('input', ()=>{
@@ -585,6 +643,7 @@ function setupSplash(){
 }
 
 setupSplash();
+drawWheel();
 getState();
 setInterval(getState, 1800);
 </script>
@@ -628,31 +687,41 @@ Intensity strToIntensity(const String& s){
 
 String colorToStr(ColorSel c){
   switch(c){
-    case C_RED:   return "RED";
-    case C_GREEN: return "GREEN";
-    case C_BLUE:  return "BLUE";
-    default:      return "RED";
+    case C_RED:    return "RED";
+    case C_GREEN:  return "GREEN";
+    case C_BLUE:   return "BLUE";
+    case C_CUSTOM: return "CUSTOM";
+    default:       return "RED";
   }
 }
 
 ColorSel strToColor(const String& s){
-  if(s=="GREEN") return C_GREEN;
-  if(s=="BLUE")  return C_BLUE;
+  if(s=="GREEN")  return C_GREEN;
+  if(s=="BLUE")   return C_BLUE;
+  if(s=="CUSTOM") return C_CUSTOM;
   return C_RED;
 }
 
 void sendIndex(){
   noteActivity();
+  // First time UI is served: confirm connection with 4 rapid blue blinks
+  if (!uiServed) {
+    uiServed = true;
+    connectionConfirmBlink();
+  }
   server.send(200, "text/html; charset=utf-8", INDEX_HTML);
 }
 
 void handleState(){
   if (captivePortal()) return;
   noteActivity();
-  StaticJsonDocument<256> doc;
+  StaticJsonDocument<384> doc;
   doc["mode"]     = (int)state.mode;
   doc["intensity"]= intensityToStr(state.intensity);
   doc["color"]    = colorToStr(state.color);
+  doc["customR"]  = state.customR;
+  doc["customG"]  = state.customG;
+  doc["customB"]  = state.customB;
   doc["dazzle"]   = state.dazzle;
   doc["wpm"]      = state.wpm;
   // FIX: Thread-safe access to text
@@ -681,6 +750,9 @@ void handleUpdate(){
       }
     }
     if (doc.containsKey("color"))     state.color     = strToColor(doc["color"].as<String>());
+    if (doc.containsKey("customR"))   state.customR   = (uint8_t)doc["customR"].as<int>();
+    if (doc.containsKey("customG"))   state.customG   = (uint8_t)doc["customG"].as<int>();
+    if (doc.containsKey("customB"))   state.customB   = (uint8_t)doc["customB"].as<int>();
     if (doc.containsKey("dazzle"))    state.dazzle    = doc["dazzle"].as<bool>();
     if (doc.containsKey("wpm")) {
       int newWpm = doc["wpm"].as<int>();
@@ -744,15 +816,42 @@ void goToDeepSleep() {
   esp_deep_sleep_start();
 }
 
-// -------------------- Ready Blink ------------------------
-void readyBlink(){
-  FastLED.setBrightness(160);
-  for (int k=0; k<2; k++) {
-    leds[0]=CRGB(128,0,0); FastLED.show(); delay(250);
-    leds[0]=CRGB(0,128,0); FastLED.show(); delay(250);
-    leds[0]=CRGB(0,0,128); FastLED.show(); delay(250);
+// -------------------- Blue Pulse (WiFi AP Ready Indicator) --------------------
+// Called repeatedly in loop() to create a breathing blue effect while waiting for UI connection
+void updateBluePulse() {
+  unsigned long now = millis();
+  if (now - lastPulseMs < PULSE_INTERVAL_MS) return;
+  lastPulseMs = now;
+
+  // Update brightness with direction
+  int newState = pulseState + pulseDirection;
+  if (newState >= 90) {
+    newState = 90;
+    pulseDirection = -5;  // Reverse to dim
+  } else if (newState <= 10) {
+    newState = 10;
+    pulseDirection = 5;   // Reverse to brighten
   }
-  allOff();
+  pulseState = (uint8_t)newState;
+
+  // Apply blue color at current brightness
+  FastLED.setBrightness(pulseState);
+  leds[0] = CRGB(0, 0, 128);
+  FastLED.show();
+}
+
+// -------------------- Connection Confirm Blink --------------------
+// 4 rapid blue blinks to indicate successful Web UI connection
+void connectionConfirmBlink() {
+  for (int i = 0; i < 4; i++) {
+    FastLED.setBrightness(160);
+    leds[0] = CRGB(0, 0, 128);
+    FastLED.show();
+    delay(100);
+    rgbOff();
+    delay(100);
+  }
+  rgbOff();
 }
 
 // -------------------- Setup / Loop -----------------------
@@ -840,9 +939,6 @@ void setup(){
   server.onNotFound(handleNotFound);
   server.begin();
 
-  // Ready indication
-  readyBlink();
-
   // Morse task
   xTaskCreate(morseTask, "morse", 4096, nullptr, 1, &morseTaskHandle);
 }
@@ -859,6 +955,11 @@ void loop(){
   if (apRunning) {
     dnsServer.processNextRequest();
     server.handleClient();
+
+    // Pulse blue LED while waiting for Web UI connection
+    if (!uiServed) {
+      updateBluePulse();
+    }
 
     // idle timeout -> shut down Wi-Fi
     unsigned long now = millis();
