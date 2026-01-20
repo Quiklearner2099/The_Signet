@@ -42,7 +42,8 @@
   ===================================================================================
 
   v1.0.3 (January 19, 2026) - Blue pulsing LED indicates WiFi AP ready, 4 rapid blinks
-                              confirm Web UI connection, custom color wheel picker
+                              confirm Web UI connection, custom color wheel picker,
+                              hardware PWM for IR LED (improved power efficiency)
   v1.0.2 (January 3, 2026) - Compact mobile-friendly UI
   v1.0.1 (January 2, 2026) - Added adjustable Morse speed (WPM)
   v1.0.0 (January 1, 2026) - Initial Stable Release
@@ -66,6 +67,7 @@
 #include <LittleFS.h>
 #include "esp_sleep.h"
 #include "esp_mac.h"   // esp_read_mac()
+#include "driver/ledc.h"  // Hardware PWM for IR LED
 
 // -------------------- Version Information --------------------
 #define FIRMWARE_VERSION "1.0.3"
@@ -84,7 +86,7 @@ Intensity strToIntensity(const String& s);
 String   colorToStr(ColorSel c);
 ColorSel strToColor(const String& s);
 
-void irPwmTask(void* pv);
+void setupIrHardwarePwm();
 void morseTask(void* pv);
 
 void sendIndex();
@@ -109,6 +111,11 @@ void  goToDeepSleep();
 // CLOSED  -> D2 = LOW  -> run normally
 // OPEN    -> D2 = HIGH (INPUT_PULLUP) -> deep sleep
 #define PIN_SLEEP_SW D2
+
+// -------------------- Hardware PWM (LEDC) for IR LED --------------------
+#define IR_LEDC_CHANNEL  LEDC_CHANNEL_0
+#define IR_LEDC_TIMER    LEDC_TIMER_0
+#define IR_LEDC_FREQ_HZ  200  // 200 Hz PWM frequency
 
 // -------------------- WiFi AP -------------------------
 const char* AP_SSID_BASE = "The_Signet";
@@ -155,34 +162,32 @@ DNSServer dnsServer;
 // -------------------- RGB via FastLED ---------------------
 CRGB leds[NUM_PIXELS];
 
-// -------------------- Software PWM for IR -----------------
-// This may change to Hardware PWM in future release
-static TaskHandle_t irPwmTaskHandle = nullptr;
-volatile uint8_t g_irDuty = 0;
-volatile bool    g_irEnable = false;
+// -------------------- Hardware PWM (LEDC) for IR -----------------
+void setupIrHardwarePwm() {
+  ledc_timer_config_t timer_conf = {
+    .speed_mode = LEDC_LOW_SPEED_MODE,
+    .duty_resolution = LEDC_TIMER_8_BIT,
+    .timer_num = IR_LEDC_TIMER,
+    .freq_hz = IR_LEDC_FREQ_HZ,
+    .clk_cfg = LEDC_AUTO_CLK
+  };
+  ledc_timer_config(&timer_conf);
 
-void irPwmTask(void*) {
-  const uint32_t PERIOD_US = 5000; // 200 Hz
-  while (true) {
-    uint32_t on_us  = (g_irEnable ? (uint32_t)g_irDuty * PERIOD_US / 255 : 0);
-    uint32_t off_us = (on_us >= PERIOD_US) ? 0 : (PERIOD_US - on_us);
+  ledc_channel_config_t channel_conf = {
+    .gpio_num = PIN_IR,
+    .speed_mode = LEDC_LOW_SPEED_MODE,
+    .channel = IR_LEDC_CHANNEL,
+    .intr_type = LEDC_INTR_DISABLE,
+    .timer_sel = IR_LEDC_TIMER,
+    .duty = 0,
+    .hpoint = 0
+  };
+  ledc_channel_config(&channel_conf);
+}
 
-    if (on_us > 0) {
-      digitalWrite(PIN_IR, HIGH);
-      delayMicroseconds(on_us);
-      digitalWrite(PIN_IR, LOW);
-    } else {
-      digitalWrite(PIN_IR, LOW);
-    }
-
-    if (off_us >= 1000) {
-      vTaskDelay(pdMS_TO_TICKS(off_us / 1000));
-      uint32_t rem = off_us % 1000;
-      if (rem) delayMicroseconds(rem);
-    } else if (off_us > 0) {
-      delayMicroseconds(off_us);
-    }
-  }
+inline void irSetDuty(uint8_t duty) {
+  ledc_set_duty(LEDC_LOW_SPEED_MODE, IR_LEDC_CHANNEL, duty);
+  ledc_update_duty(LEDC_LOW_SPEED_MODE, IR_LEDC_CHANNEL);
 }
 
 // -------------------- App State --------------------------
@@ -281,8 +286,8 @@ const char* lookupMorse(char c) {
 }
 
 // -------------------- LED Control -------------------------
-inline void irOff() { g_irDuty = 0; g_irEnable = false; digitalWrite(PIN_IR, LOW); }
-inline void irOn()  { g_irDuty = irDutyFor(state.intensity); g_irEnable = true; }
+inline void irOff() { irSetDuty(0); }
+inline void irOn()  { irSetDuty(irDutyFor(state.intensity)); }
 
 void rgbOff() {
   FastLED.setBrightness(0);
@@ -408,8 +413,6 @@ body{background:var(--bg);color:var(--text)}
 .color-picker-wrap{display:none;margin-top:8px;text-align:center}
 .color-picker-wrap.visible{display:block}
 #wheelCanvas{cursor:crosshair;border-radius:50%}
-#briSlider{width:80px;margin-top:6px;-webkit-appearance:none;height:6px;border-radius:3px;background:linear-gradient(to right,#000,#fff)}
-#briSlider::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;border-radius:50%;background:var(--accent);cursor:pointer;border:2px solid #222}
 .dazzle-row{display:flex;align-items:center;gap:8px}
 .dazzle-row span{font-size:11px;color:var(--muted)}
 .switch{position:relative;width:44px;height:24px}
@@ -486,8 +489,7 @@ input:checked + .slider:before{transform:translateX(20px);background:#111}
         <div class="color custom" data-color="CUSTOM" id="customSwatch"></div>
       </div>
       <div class="color-picker-wrap" id="pickerWrap">
-        <canvas id="wheelCanvas" width="80" height="80"></canvas><br>
-        <input type="range" id="briSlider" min="20" max="100" value="50">
+        <canvas id="wheelCanvas" width="80" height="80"></canvas>
       </div>
     </div>
     <div class="card" id="dazzleCard">
@@ -530,7 +532,6 @@ const ui = {
   colorCard: document.getElementById('colorCard'),
   dazzleCard: document.getElementById('dazzleCard'),
   wheelCanvas: document.getElementById('wheelCanvas'),
-  briSlider: document.getElementById('briSlider'),
   pickerWrap: document.getElementById('pickerWrap'),
   customSwatch: document.getElementById('customSwatch')
 };
@@ -542,9 +543,9 @@ async function post(url, body) {
   } catch(e) { console.error(e); }
 }
 
-let wheelHue=0,wheelBri=50;
+let wheelHue=0;
 function hslToRgb(h,s,l){s/=100;l/=100;const k=n=>(n+h/30)%12;const a=s*Math.min(l,1-l);const f=n=>l-a*Math.max(-1,Math.min(k(n)-3,Math.min(9-k(n),1)));return{r:Math.round(f(0)*255),g:Math.round(f(8)*255),b:Math.round(f(4)*255)};}
-function drawWheel(){const c=ui.wheelCanvas,ctx=c.getContext('2d'),cx=c.width/2,cy=c.height/2,r=cx-2;for(let a=0;a<360;a++){ctx.beginPath();ctx.moveTo(cx,cy);ctx.arc(cx,cy,r,a*Math.PI/180,(a+2)*Math.PI/180);ctx.closePath();ctx.fillStyle='hsl('+a+',100%,'+wheelBri+'%)';ctx.fill();}}
+function drawWheel(){const c=ui.wheelCanvas,ctx=c.getContext('2d'),cx=c.width/2,cy=c.height/2,r=cx-2;for(let a=0;a<360;a++){ctx.beginPath();ctx.moveTo(cx,cy);ctx.arc(cx,cy,r,a*Math.PI/180,(a+2)*Math.PI/180);ctx.closePath();ctx.fillStyle='hsl('+a+',100%,50%)';ctx.fill();}}
 function pickFromWheel(e){const c=ui.wheelCanvas,rect=c.getBoundingClientRect(),x=e.clientX-rect.left-c.width/2,y=e.clientY-rect.top-c.height/2,d=Math.sqrt(x*x+y*y);if(d>c.width/2)return null;let a=Math.atan2(y,x)*180/Math.PI;if(a<0)a+=360;return Math.round(a);}
 
 async function getState() {
@@ -582,7 +583,6 @@ async function getState() {
 ui.modes.forEach(b => b.addEventListener('click', async ()=>{
   ui.modes.forEach(x=>x.classList.remove('active')); b.classList.add('active');
   await post('/api/update', { mode: b.dataset.mode });
-  getState();
 }));
 ui.ints.forEach(b => b.addEventListener('click', async ()=>{
   ui.ints.forEach(x=>x.classList.remove('active')); b.classList.add('active');
@@ -597,13 +597,7 @@ ui.colors.forEach(c => c.addEventListener('click', async ()=>{
 }));
 ui.wheelCanvas.addEventListener('click', async (e)=>{
   const h=pickFromWheel(e);if(h===null)return;wheelHue=h;
-  const rgb=hslToRgb(wheelHue,100,wheelBri);
-  ui.customSwatch.style.background='rgb('+rgb.r+','+rgb.g+','+rgb.b+')';
-  await post('/api/update',{customR:rgb.r,customG:rgb.g,customB:rgb.b});
-});
-ui.briSlider.addEventListener('input',()=>{wheelBri=parseInt(ui.briSlider.value);drawWheel();});
-ui.briSlider.addEventListener('change', async ()=>{
-  const rgb=hslToRgb(wheelHue,100,wheelBri);
+  const rgb=hslToRgb(wheelHue,100,50);
   ui.customSwatch.style.background='rgb('+rgb.r+','+rgb.g+','+rgb.b+')';
   await post('/api/update',{customR:rgb.r,customG:rgb.g,customB:rgb.b});
 });
@@ -643,9 +637,8 @@ function setupSplash(){
 }
 
 setupSplash();
-drawWheel();
 getState();
-setInterval(getState, 1800);
+setInterval(getState, 2000);
 </script>
 </body></html>
 )====";
@@ -744,10 +737,6 @@ void handleUpdate(){
     }
     if (doc.containsKey("intensity")) {
       state.intensity = strToIntensity(doc["intensity"].as<String>());
-      // FIX: Update IR duty cycle live if currently playing in DISCREET mode
-      if (state.playing && state.mode == DISCREET && g_irEnable) {
-        g_irDuty = irDutyFor(state.intensity);
-      }
     }
     if (doc.containsKey("color"))     state.color     = strToColor(doc["color"].as<String>());
     if (doc.containsKey("customR"))   state.customR   = (uint8_t)doc["customR"].as<int>();
@@ -872,9 +861,8 @@ void setup(){
   // Sleep switch first
   pinMode(PIN_SLEEP_SW, INPUT_PULLUP);
 
-  // IR pin
-  pinMode(PIN_IR, OUTPUT);
-  digitalWrite(PIN_IR, LOW);
+  // IR LED hardware PWM setup
+  setupIrHardwarePwm();
 
   // RGB (WS2812) - init & turn OFF immediately
   FastLED.addLeds<NEOPIXEL, PIN_RGB>(leds, NUM_PIXELS);
@@ -896,8 +884,6 @@ void setup(){
     Serial.println("WARNING: Failed to create text mutex");
   }
 
-  // IR software PWM task
-  xTaskCreate(irPwmTask, "irpwm", 2048, nullptr, 2, &irPwmTaskHandle);
 
   // Wi-Fi AP + captive DNS
   WiFi.mode(WIFI_AP);
