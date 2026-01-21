@@ -70,8 +70,8 @@
 #include "driver/ledc.h"  // Hardware PWM for IR LED
 
 // -------------------- Version Information --------------------
-#define FIRMWARE_VERSION "1.0.3"
-#define FIRMWARE_DATE    "JANUARY 19 2026"
+#define FIRMWARE_VERSION "1.1.0"
+#define FIRMWARE_DATE    "JANUARY 21 2026"
 
 // -------------------- Forward Declarations --------------------
 enum Mode     { DISCREET = 0, VISIBLE = 1 };
@@ -90,6 +90,7 @@ void setupIrHardwarePwm();
 void morseTask(void* pv);
 
 void sendIndex();
+void sendHelpPage();
 void handleState();
 void handleUpdate();
 void handlePlay();
@@ -285,6 +286,21 @@ const char* lookupMorse(char c) {
   return nullptr;
 }
 
+// -------------------- Prosigns ---------------------------
+struct ProsignEntry { const char* tag; const char* code; };
+const ProsignEntry PROSIGNS[] = {
+  {"KA", "-.-.-"},   // Starting signal
+  {"AR", ".-.-."}    // End of message
+};
+const size_t PROSIGN_LEN = sizeof(PROSIGNS) / sizeof(ProsignEntry);
+
+const char* lookupProsign(const String& tag) {
+  for (size_t i = 0; i < PROSIGN_LEN; i++) {
+    if (tag.equalsIgnoreCase(PROSIGNS[i].tag)) return PROSIGNS[i].code;
+  }
+  return nullptr;
+}
+
 // -------------------- LED Control -------------------------
 inline void irOff() { irSetDuty(0); }
 inline void irOn()  { irSetDuty(irDutyFor(state.intensity)); }
@@ -360,6 +376,23 @@ void morseTask(void*) {
       
       for (size_t i=0; i<msg.length() && state.playing; i++) {
         char c = msg[i];
+
+        // Check for prosign: <XX> syntax
+        if (c == '<') {
+          int closePos = msg.indexOf('>', i);
+          if (closePos > (int)i + 1 && closePos <= (int)i + 4) {
+            String tag = msg.substring(i + 1, closePos);
+            const char* code = lookupProsign(tag);
+            if (code) {
+              playLetter(code);  // Play as single unit
+              if (!state.playing) break;
+              morseDelay(gapLetter());
+              i = closePos;  // Skip past closing >
+              continue;
+            }
+          }
+        }
+
         if (c == ' ') {
           morseDelay(gapWord());
           continue;
@@ -429,14 +462,18 @@ input:checked + .slider:before{transform:translateX(20px);background:#111}
 .wpm-slider input[type="range"]::-webkit-slider-thumb{-webkit-appearance:none;width:20px;height:20px;border-radius:50%;background:var(--accent);cursor:pointer;border:2px solid #222}
 .wpm-slider input[type="range"]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;background:var(--accent);cursor:pointer;border:2px solid #222}
 .wpm-labels{display:flex;justify-content:space-between;font-size:9px;color:#666;margin-top:4px;padding:0 2px}
-.msg-input{width:100%;background:#151515;border:1px solid #2A2A2A;border-radius:10px;padding:10px;color:#eee;font-size:14px;outline:none}
+.msg-input{width:100%;min-height:72px;background:#151515;border:1px solid #2A2A2A;border-radius:10px;padding:10px;color:#eee;font-size:14px;outline:none;resize:none;font-family:inherit;line-height:1.4}
 .msg-hint{font-size:10px;color:#fff;margin:6px 0;text-align:center}
+.msg-header{display:flex;align-items:baseline}
+.max-hint{font-size:10px;color:#666;font-weight:400;margin-left:6px}
+.tx-time{margin-left:auto;font-size:11px;color:#8AB4F8;font-weight:400}
 .btn-row{display:flex;gap:8px;margin-top:8px}
 .btn-row button{flex:1;border:0;border-radius:10px;padding:10px;font-weight:700;font-size:13px;cursor:pointer}
 .btn-row .play{background:var(--primary);color:#000}
 .btn-row .stop{background:transparent;color:#fff;border:1px solid #333}
 .status{text-align:center;font-size:11px;color:#666;margin-top:6px}
 .footer{text-align:center;font-size:10px;color:#FFD700;font-weight:700;margin-top:10px}
+.help-btn{display:inline-block;width:20px;height:20px;border-radius:50%;background:#333;color:#888;text-decoration:none;font-size:12px;line-height:20px;text-align:center;margin-right:8px;vertical-align:middle}
 #splash{position:fixed;inset:0;background:rgba(0,0,0,.92);display:flex;align-items:center;justify-content:center;z-index:9999;opacity:0;pointer-events:none;transition:opacity .3s}
 #splash.visible{opacity:1;pointer-events:auto}
 #splash img{max-width:90vw;max-height:90vh;border-radius:12px;box-shadow:0 0 40px rgba(0,0,0,.7)}
@@ -451,9 +488,9 @@ input:checked + .slider:before{transform:translateX(20px);background:#111}
 <div class="grid">
 
   <div class="card">
-    <h3>Message</h3>
-    <input type="text" class="msg-input" id="msg" placeholder="S O S" maxlength="64">
-    <div class="msg-hint">A-Z a-z 0-9 . , ? / - ( ) @ = space</div>
+    <h3 class="msg-header">Message <span class="max-hint">(MAX 200 Characters)</span><span class="tx-time" id="txTime"></span></h3>
+    <textarea class="msg-input" id="msg" placeholder="S O S" maxlength="200" rows="3"></textarea>
+    <div class="msg-hint">A-Z 0-9 . , ? / - ( ) @ = space &lt;KA&gt; &lt;AR&gt;</div>
     <div class="btn-row">
       <button class="play" id="play">&#9654; Play</button>
       <button class="stop" id="stop">&#9632; Stop</button>
@@ -513,11 +550,14 @@ input:checked + .slider:before{transform:translateX(20px);background:#111}
   </div>
 
 </div>
-<div class="footer">1984 was not an instruction manual</div>
+<div class="footer"><a href="/help" class="help-btn">?</a>1984 was not an instruction manual</div>
 </div>
 
 <script>
 const SPLASH_KEY = 'signet_splash_seen';
+const MORSE={A:'.-',B:'-...',C:'-.-.',D:'-..',E:'.',F:'..-.',G:'--.',H:'....',I:'..',J:'.---',K:'-.-',L:'.-..',M:'--',N:'-.',O:'---',P:'.--.',Q:'--.-',R:'.-.',S:'...',T:'-',U:'..-',V:'...-',W:'.--',X:'-..-',Y:'-.--',Z:'--..',0:'-----',1:'.----',2:'..---',3:'...--',4:'....-',5:'.....',6:'-....',7:'--...',8:'---..',9:'----.','.':'.-.-.-',',':'--..--','?':'..--..','/':'-..-.','-':'-....-','(':'-.--.',')':'-.--.-','@':'.--.-.','=':'-...-'};
+const PROSIGNS={KA:'-.-.-',AR:'.-.-.'};
+function calcTxTime(msg,wpm){const dit=1200/wpm;let ms=0,i=0;while(i<msg.length){const c=msg[i].toUpperCase();if(c==='<'){const cl=msg.indexOf('>',i);if(cl>i+1&&cl<=i+4){const tag=msg.substring(i+1,cl).toUpperCase(),code=PROSIGNS[tag];if(code){for(const s of code)ms+=(s==='.'?dit:3*dit)+dit;ms+=2*dit;i=cl+1;continue;}}}if(c===' '){ms+=7*dit;i++;continue;}const code=MORSE[c];if(code){for(const s of code)ms+=(s==='.'?dit:3*dit)+dit;ms+=2*dit;}i++;}const secs=Math.ceil(ms/1000),mm=String(Math.floor(secs/60)).padStart(2,'0'),ss=String(secs%60).padStart(2,'0');return mm+':'+ss;}
 const ui = {
   modes: document.querySelectorAll('#modeGroup button'),
   ints: document.querySelectorAll('#intensityGroup button'),
@@ -533,7 +573,8 @@ const ui = {
   dazzleCard: document.getElementById('dazzleCard'),
   wheelCanvas: document.getElementById('wheelCanvas'),
   pickerWrap: document.getElementById('pickerWrap'),
-  customSwatch: document.getElementById('customSwatch')
+  customSwatch: document.getElementById('customSwatch'),
+  txTime: document.getElementById('txTime')
 };
 
 async function post(url, body) {
@@ -610,7 +651,7 @@ ui.wpm.addEventListener('change', async ()=>{
   await post('/api/update', { wpm: parseInt(ui.wpm.value) });
 });
 
-ui.play.addEventListener('click', async ()=>{ await post('/api/play', { text: ui.msg.value || '' }); ui.status.textContent = 'Playing…'; });
+ui.play.addEventListener('click', async ()=>{ const wpm=parseInt(ui.wpm.value)||10; ui.txTime.textContent='\u23F1 '+calcTxTime(ui.msg.value||'',wpm); await post('/api/play', { text: ui.msg.value || '' }); ui.status.textContent = 'Playing…'; });
 ui.stop.addEventListener('click', async ()=>{ await post('/api/stop'); ui.status.textContent = 'Idle'; });
 
 function setupSplash(){
@@ -640,6 +681,87 @@ setupSplash();
 getState();
 setInterval(getState, 2000);
 </script>
+</body></html>
+)====";
+
+// -------------------- Help Page HTML ----------------------
+static const char HELP_HTML[] PROGMEM = R"====(
+<!doctype html><html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Morse Reference</title>
+<style>
+:root{--bg:#121212;--card:#1E1E1E;--text:#ECECEC}
+*{box-sizing:border-box;font-family:system-ui,sans-serif;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);padding:16px;max-width:480px;margin:0 auto}
+h1{font-size:18px;margin-bottom:16px;text-align:center}
+h2{font-size:14px;color:#888;margin:16px 0 8px;border-bottom:1px solid #333;padding-bottom:4px}
+.back{display:block;text-align:center;color:#8AB4F8;margin-bottom:16px}
+table{width:100%;border-collapse:collapse;font-size:12px}
+td,th{padding:6px 8px;border:1px solid #333;text-align:left}
+th{background:#222;color:#888;font-weight:600}
+.code{font-family:monospace;letter-spacing:2px}
+.timing{background:#1a1a1a;padding:12px;border-radius:8px;font-family:monospace;font-size:11px;line-height:1.8}
+.dot{color:#8AB4F8}
+.dash{color:#8AB4F8}
+.gap{color:#666}
+</style>
+</head>
+<body>
+<a href="/" class="back">← Back to Control</a>
+<h1>Morse Code Reference</h1>
+
+<h2>Letters</h2>
+<table>
+<tr><th>Char</th><th>Code</th><th>Char</th><th>Code</th><th>Char</th><th>Code</th></tr>
+<tr><td>A</td><td class="code">·−</td><td>J</td><td class="code">·−−−</td><td>S</td><td class="code">···</td></tr>
+<tr><td>B</td><td class="code">−···</td><td>K</td><td class="code">−·−</td><td>T</td><td class="code">−</td></tr>
+<tr><td>C</td><td class="code">−·−·</td><td>L</td><td class="code">·−··</td><td>U</td><td class="code">··−</td></tr>
+<tr><td>D</td><td class="code">−··</td><td>M</td><td class="code">−−</td><td>V</td><td class="code">···−</td></tr>
+<tr><td>E</td><td class="code">·</td><td>N</td><td class="code">−·</td><td>W</td><td class="code">·−−</td></tr>
+<tr><td>F</td><td class="code">··−·</td><td>O</td><td class="code">−−−</td><td>X</td><td class="code">−··−</td></tr>
+<tr><td>G</td><td class="code">−−·</td><td>P</td><td class="code">·−−·</td><td>Y</td><td class="code">−·−−</td></tr>
+<tr><td>H</td><td class="code">····</td><td>Q</td><td class="code">−−·−</td><td>Z</td><td class="code">−−··</td></tr>
+<tr><td>I</td><td class="code">··</td><td>R</td><td class="code">·−·</td><td></td><td></td></tr>
+</table>
+
+<h2>Numbers</h2>
+<table>
+<tr><th>Char</th><th>Code</th><th>Char</th><th>Code</th></tr>
+<tr><td>0</td><td class="code">−−−−−</td><td>5</td><td class="code">·····</td></tr>
+<tr><td>1</td><td class="code">·−−−−</td><td>6</td><td class="code">−····</td></tr>
+<tr><td>2</td><td class="code">··−−−</td><td>7</td><td class="code">−−···</td></tr>
+<tr><td>3</td><td class="code">···−−</td><td>8</td><td class="code">−−−··</td></tr>
+<tr><td>4</td><td class="code">····−</td><td>9</td><td class="code">−−−−·</td></tr>
+</table>
+
+<h2>Punctuation</h2>
+<table>
+<tr><th>Char</th><th>Code</th><th>Char</th><th>Code</th></tr>
+<tr><td>.</td><td class="code">·−·−·−</td><td>-</td><td class="code">−····−</td></tr>
+<tr><td>,</td><td class="code">−−··−−</td><td>(</td><td class="code">−·−−·</td></tr>
+<tr><td>?</td><td class="code">··−−··</td><td>)</td><td class="code">−·−−·−</td></tr>
+<tr><td>/</td><td class="code">−··−·</td><td>@</td><td class="code">·−−·−·</td></tr>
+<tr><td>=</td><td class="code">−···−</td><td></td><td></td></tr>
+</table>
+
+<h2>Prosigns</h2>
+<p style="font-size:11px;color:#888;margin-bottom:8px">Type with angle brackets: &lt;KA&gt; &lt;AR&gt;</p>
+<table>
+<tr><th>Tag</th><th>Code</th><th>Meaning</th></tr>
+<tr><td>&lt;KA&gt;</td><td class="code">−·−·−</td><td>Starting signal</td></tr>
+<tr><td>&lt;AR&gt;</td><td class="code">·−·−·</td><td>End of message</td></tr>
+</table>
+
+<h2>Timing</h2>
+<div class="timing">
+<span class="dot">·</span> Dot = 1 unit<br>
+<span class="dash">−</span> Dash = 3 units<br>
+<span class="gap">|</span> Gap (intra-char) = 1 unit<br>
+<span class="gap">| | |</span> Gap (between letters) = 3 units<br>
+<span class="gap">| | | | | | |</span> Gap (between words) = 7 units<br><br>
+At 10 WPM: 1 unit = 120ms
+</div>
+
 </body></html>
 )====";
 
@@ -702,7 +824,17 @@ void sendIndex(){
     uiServed = true;
     connectionConfirmBlink();
   }
+  server.sendHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+  server.sendHeader("Pragma", "no-cache");
   server.send(200, "text/html; charset=utf-8", INDEX_HTML);
+}
+
+void sendHelpPage(){
+  if (captivePortal()) return;
+  noteActivity();
+  server.sendHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+  server.sendHeader("Pragma", "no-cache");
+  server.send(200, "text/html; charset=utf-8", HELP_HTML);
 }
 
 void handleState(){
@@ -762,7 +894,7 @@ void handlePlay(){
   if (!err && doc.containsKey("text")) {
     String newText = doc["text"].as<String>();
     // Limit to 64 characters to prevent memory issues
-    if (newText.length() > 64) newText = newText.substring(0, 64);
+    if (newText.length() > 200) newText = newText.substring(0, 200);
     // Don't allow empty text - keep default if empty
     if (newText.length() > 0) {
       setTextSafe(newText);
@@ -864,7 +996,13 @@ void setup(){
   // IR LED hardware PWM setup
   setupIrHardwarePwm();
 
+  // Pre-set RGB data pin LOW to prevent spurious flash during FastLED init
+  pinMode(PIN_RGB, OUTPUT);
+  digitalWrite(PIN_RGB, LOW);
+  delay(1);
+
   // RGB (WS2812) - init & turn OFF immediately
+  leds[0] = CRGB::Black;
   FastLED.addLeds<NEOPIXEL, PIN_RGB>(leds, NUM_PIXELS);
   rgbOff();
 
@@ -906,6 +1044,7 @@ void setup(){
 
   // HTTP routes
   server.on("/",           HTTP_GET,  sendIndex);
+  server.on("/help",       HTTP_GET,  sendHelpPage);
   server.on("/api/state",  HTTP_GET,  handleState);
   server.on("/api/update", HTTP_POST, handleUpdate);
   server.on("/api/play",   HTTP_POST, handlePlay);
