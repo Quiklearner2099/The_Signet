@@ -1,8 +1,8 @@
 /*
   ===================================================================================
   The Signet Morse Beacon
-  Version: 1.0.3
-  Release Date: January 19, 2026
+  Version: 1.1.0
+  Release Date: January 21, 2026
   ===================================================================================
 
   DESCRIPTION:
@@ -203,7 +203,7 @@ struct AppState {
   volatile uint8_t customR = 255;  // Custom color RGB components
   volatile uint8_t customG = 0;
   volatile uint8_t customB = 255;  // Default: magenta
-  String text = "S O S";
+  String text = "SOS";
   volatile bool playing = false;
 } state;
 
@@ -213,7 +213,7 @@ String getTextCopy() {
     copy = state.text;
     xSemaphoreGive(textMutex);
   } else {
-    copy = "S O S";  // Fallback if mutex fails
+    copy = "SOS";  // Fallback if mutex fails
   }
   return copy;
 }
@@ -489,7 +489,7 @@ input:checked + .slider:before{transform:translateX(20px);background:#111}
 
   <div class="card">
     <h3 class="msg-header">Message <span class="max-hint">(MAX 200 Characters)</span><span class="tx-time" id="txTime"></span></h3>
-    <textarea class="msg-input" id="msg" placeholder="S O S" maxlength="200" rows="3"></textarea>
+    <textarea class="msg-input" id="msg" placeholder="SOS" maxlength="200" rows="3"></textarea>
     <div class="msg-hint">A-Z 0-9 . , ? / - ( ) @ = space &lt;KA&gt; &lt;AR&gt;</div>
     <div class="btn-row">
       <button class="play" id="play">&#9654; Play</button>
