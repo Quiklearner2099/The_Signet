@@ -1,8 +1,8 @@
 /*
   ===================================================================================
   The Signet Morse Beacon
-  Version: 1.1.0
-  Release Date: January 21, 2026
+  Version: 1.1.1
+  Release Date: January 27, 2026
   ===================================================================================
 
   DESCRIPTION:
@@ -41,10 +41,17 @@
   VERSION HISTORY:
   ===================================================================================
 
+  v1.1.1 (January 27, 2026) - UI improvements: larger help icon and 1984 footer text,
+                              firmware version indicator, splash screen text and
+                              improved load reliability, Harlow font title, yellow
+                              message hints, white card titles, iOS auto-zoom fix,
+                              IR PWM frequency increased from 200 Hz to 30 kHz
+  v1.1.0 (January 21, 2026) - Default message "S O S" changed to "SOS" for standard
+                              Morse timing
   v1.0.3 (January 19, 2026) - Blue pulsing LED indicates WiFi AP ready, 4 rapid blinks
                               confirm Web UI connection, custom color wheel picker,
                               hardware PWM for IR LED (improved power efficiency)
-  v1.0.2 (January 3, 2026) - Compact mobile-friendly UI
+  v1.0.2 (January 3, 2026)  - Compact mobile-friendly UI
   v1.0.1 (January 2, 2026) - Added adjustable Morse speed (WPM)
   v1.0.0 (January 1, 2026) - Initial Stable Release
 
@@ -70,8 +77,8 @@
 #include "driver/ledc.h"  // Hardware PWM for IR LED
 
 // -------------------- Version Information --------------------
-#define FIRMWARE_VERSION "1.1.0"
-#define FIRMWARE_DATE    "JANUARY 21 2026"
+#define FIRMWARE_VERSION "1.1.1"
+#define FIRMWARE_DATE    "JANUARY 27 2026"
 
 // -------------------- Forward Declarations --------------------
 enum Mode     { DISCREET = 0, VISIBLE = 1 };
@@ -116,7 +123,7 @@ void  goToDeepSleep();
 // -------------------- Hardware PWM (LEDC) for IR LED --------------------
 #define IR_LEDC_CHANNEL  LEDC_CHANNEL_0
 #define IR_LEDC_TIMER    LEDC_TIMER_0
-#define IR_LEDC_FREQ_HZ  200  // 200 Hz PWM frequency
+#define IR_LEDC_FREQ_HZ  30000  // 30 kHz PWM frequency
 
 // -------------------- WiFi AP -------------------------
 const char* AP_SSID_BASE = "The_Signet";
@@ -426,15 +433,16 @@ static const char INDEX_HTML[] PROGMEM = R"====(
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>The Signet Morse Beacon</title>
 <style>
+@font-face{font-family:'Harlow';src:url('/HarlowSolid.ttf') format('truetype')}
 :root{--bg:#121212;--card:#1E1E1E;--text:#ECECEC;--muted:#B0B0B0;--accent:#8AB4F8;--primary:#8AB4F8}
 *{box-sizing:border-box;font-family:Inter,system-ui,Segoe UI,Roboto,Arial,sans-serif;margin:0;padding:0}
 body{background:var(--bg);color:var(--text)}
 .wrap{max-width:420px;margin:0 auto;padding:10px}
-.appbar{text-align:center;padding:10px;font-size:15px;font-weight:600;color:#ddd;border-bottom:1px solid #222}
+.appbar{text-align:center;padding:12px;font-family:'Harlow',cursive;font-size:28px;font-weight:400;color:#ddd;border-bottom:1px solid #222}
 .grid{display:flex;flex-direction:column;gap:10px;margin-top:10px}
 .row-2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .card{background:var(--card);border:1px solid #2A2A2A;border-radius:12px;padding:12px}
-.card h3{font-size:11px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px}
+.card h3{font-size:11px;font-weight:600;color:#fff;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px}
 .seg{display:flex;gap:6px}
 .seg button{flex:1;border:0;border-radius:8px;padding:8px 4px;background:#171717;border:1px solid #2A2A2A;color:#ddd;font-size:12px;font-weight:500;cursor:pointer}
 .seg button.active{background:var(--accent);color:#000;border-color:var(--accent)}
@@ -462,8 +470,8 @@ input:checked + .slider:before{transform:translateX(20px);background:#111}
 .wpm-slider input[type="range"]::-webkit-slider-thumb{-webkit-appearance:none;width:20px;height:20px;border-radius:50%;background:var(--accent);cursor:pointer;border:2px solid #222}
 .wpm-slider input[type="range"]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;background:var(--accent);cursor:pointer;border:2px solid #222}
 .wpm-labels{display:flex;justify-content:space-between;font-size:9px;color:#666;margin-top:4px;padding:0 2px}
-.msg-input{width:100%;min-height:72px;background:#151515;border:1px solid #2A2A2A;border-radius:10px;padding:10px;color:#eee;font-size:14px;outline:none;resize:none;font-family:inherit;line-height:1.4}
-.msg-hint{font-size:10px;color:#fff;margin:6px 0;text-align:center}
+.msg-input{width:100%;min-height:72px;background:#151515;border:1px solid #2A2A2A;border-radius:10px;padding:10px;color:#eee;font-size:16px;outline:none;resize:none;font-family:inherit;line-height:1.4}
+.msg-hint{font-size:13px;color:#FFD700;margin:6px 0;text-align:center}
 .msg-header{display:flex;align-items:baseline}
 .max-hint{font-size:10px;color:#666;font-weight:400;margin-left:6px}
 .tx-time{margin-left:auto;font-size:11px;color:#8AB4F8;font-weight:400}
@@ -472,18 +480,20 @@ input:checked + .slider:before{transform:translateX(20px);background:#111}
 .btn-row .play{background:var(--primary);color:#000}
 .btn-row .stop{background:transparent;color:#fff;border:1px solid #333}
 .status{text-align:center;font-size:11px;color:#666;margin-top:6px}
-.footer{text-align:center;font-size:10px;color:#FFD700;font-weight:700;margin-top:10px}
-.help-btn{display:inline-block;width:20px;height:20px;border-radius:50%;background:#333;color:#888;text-decoration:none;font-size:12px;line-height:20px;text-align:center;margin-right:8px;vertical-align:middle}
-#splash{position:fixed;inset:0;background:rgba(0,0,0,.92);display:flex;align-items:center;justify-content:center;z-index:9999;opacity:0;pointer-events:none;transition:opacity .3s}
+.footer{text-align:center;font-size:14px;color:#FFD700;font-weight:700;margin-top:10px}
+.version{text-align:center;font-size:11px;color:#666;margin-top:6px}
+.help-btn{display:inline-block;width:28px;height:28px;border-radius:50%;background:#333;color:#ccc;text-decoration:none;font-size:16px;line-height:28px;text-align:center;margin-right:8px;vertical-align:middle}
+#splash{position:fixed;inset:0;background:rgba(0,0,0,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;opacity:0;pointer-events:none;transition:opacity .3s}
+#splash p{color:#888;font-size:14px;margin-top:16px;font-style:italic}
 #splash.visible{opacity:1;pointer-events:auto}
 #splash img{max-width:90vw;max-height:90vh;border-radius:12px;box-shadow:0 0 40px rgba(0,0,0,.7)}
 </style>
 </head>
 <body>
 
-<div id="splash"><img src="/bb.jpg" alt="Big Brother"></div>
+<div id="splash"><img src="/bb.jpg" alt="Big Brother"><p>Click anywhere to send him a message...</p></div>
 
-<div class="appbar">The Signet Morse Beacon</div>
+<div class="appbar">The Signet</div>
 <div class="wrap">
 <div class="grid">
 
@@ -551,6 +561,7 @@ input:checked + .slider:before{transform:translateX(20px);background:#111}
 
 </div>
 <div class="footer"><a href="/help" class="help-btn">?</a>1984 was not an instruction manual</div>
+<div class="version" id="version"></div>
 </div>
 
 <script>
@@ -574,7 +585,8 @@ const ui = {
   wheelCanvas: document.getElementById('wheelCanvas'),
   pickerWrap: document.getElementById('pickerWrap'),
   customSwatch: document.getElementById('customSwatch'),
-  txTime: document.getElementById('txTime')
+  txTime: document.getElementById('txTime'),
+  version: document.getElementById('version')
 };
 
 async function post(url, body) {
@@ -614,6 +626,7 @@ async function getState() {
 
     if (s.text && document.activeElement !== ui.msg) ui.msg.value = s.text;
     ui.status.textContent = s.playing ? 'Playing…' : 'Idle';
+    if (s.version) ui.version.textContent = 'Firmware v' + s.version;
 
     const visMode = s.mode === 1;
     ui.colorCard.style.opacity = visMode ? 1 : 0.4;
@@ -665,13 +678,31 @@ function setupSplash(){
     }
   } catch(e){}
 
-  splash.classList.add('visible');
+  const img = splash.querySelector('img');
+  let shown = false;
+
+  const showSplash = () => {
+    if (shown) return;
+    shown = true;
+    splash.classList.add('visible');
+  };
 
   const hide = () => {
     splash.classList.remove('visible');
     try { if (window.localStorage) localStorage.setItem(SPLASH_KEY, '1'); } catch(e){}
     setTimeout(() => splash.remove(), 300);
   };
+
+  // If image already cached/loaded
+  if (img.complete && img.naturalHeight > 0) {
+    showSplash();
+  } else {
+    img.onload = showSplash;
+    img.onerror = () => splash.remove();
+  }
+
+  // Timeout fallback - skip if taking too long
+  setTimeout(() => { if (!shown) splash.remove(); }, 3000);
 
   splash.addEventListener('click', hide);
   setTimeout(hide, 8000);
@@ -852,6 +883,7 @@ void handleState(){
   // FIX: Thread-safe access to text
   doc["text"]     = getTextCopy();
   doc["playing"]  = state.playing;
+  doc["version"]  = FIRMWARE_VERSION;
   String out; serializeJson(doc, out);
   server.send(200, "application/json", out);
 }
@@ -1058,6 +1090,17 @@ void setup(){
       return;
     }
     server.streamFile(f, "image/jpeg");
+    f.close();
+  });
+
+  // Serve custom font from LittleFS
+  server.on("/HarlowSolid.ttf", HTTP_GET, [](){
+    File f = LittleFS.open("/HarlowSolid.ttf", "r");
+    if (!f) {
+      server.send(404, "text/plain", "Font not found");
+      return;
+    }
+    server.streamFile(f, "font/ttf");
     f.close();
   });
 
