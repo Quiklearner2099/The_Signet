@@ -194,6 +194,26 @@ html, body {
   margin: 0 auto;
 }
 
+.nav-buttons .github-btn {
+  flex: 1;
+  padding: 15px 30px;
+  border: none;
+  border-radius: 10px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: #238636;
+  color: #fff;
+  text-decoration: none;
+  text-align: center;
+  display: none;
+}
+
+.nav-buttons .github-btn:hover {
+  background: #2ea043;
+}
+
 .stage-indicator {
   text-align: center;
   font-size: 14px;
@@ -1066,9 +1086,71 @@ html, body {
 .phone-screen .main-ui.visible {
   display: block;
 }
+
+/* Mobile message overlay */
+.mobile-message {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: #121212;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 40px;
+  z-index: 99999;
+}
+
+.mobile-message h1 {
+  font-family: 'Harlow', cursive;
+  font-size: 48px;
+  color: #8AB4F8;
+  margin-bottom: 30px;
+}
+
+.mobile-message p {
+  font-size: 18px;
+  color: #ddd;
+  margin-bottom: 15px;
+  line-height: 1.6;
+}
+
+.mobile-message .github-link {
+  display: inline-block;
+  margin-top: 30px;
+  padding: 15px 30px;
+  background: #238636;
+  color: #fff;
+  text-decoration: none;
+  border-radius: 10px;
+  font-size: 18px;
+  font-weight: 600;
+  transition: background 0.2s;
+}
+
+.mobile-message .github-link:hover {
+  background: #2ea043;
+}
+
+@media (max-width: 900px) {
+  .mobile-message {
+    display: flex;
+  }
+  .container {
+    display: none;
+  }
+}
 </style>
 </head>
 <body>
+
+<!-- Mobile device message -->
+<div class="mobile-message" id="mobile-message">
+  <h1>The Signet</h1>
+  <p>This interactive tutorial is optimized for desktop viewing.</p>
+  <p>Please visit on a computer for the best experience.</p>
+  <a href="https://github.com/Quiklearner2099/The_Signet" class="github-link">View on GitHub</a>
+</div>
 
 <div class="container">
   <!-- Left Panel: Phone UI -->
@@ -1250,6 +1332,7 @@ html, body {
       </div>
       <div class="nav-buttons">
         <button class="back-btn" id="back-btn" disabled>← Back</button>
+        <a href="https://github.com/Quiklearner2099/The_Signet" target="_blank" class="github-btn" id="github-btn">GitHub Repository</a>
         <button class="next-btn" id="next-btn">Next →</button>
       </div>
       <div class="stage-indicator" id="stage-indicator">Step 1 of 13</div>
@@ -1487,6 +1570,7 @@ function updateStage() {
   // Update nav buttons
   if (currentStage === 0) {
     backBtn.style.display = 'none';
+    document.getElementById('github-btn').style.display = 'none';
     nextBtn.textContent = 'START';
     nextBtn.classList.add('centered');
   } else {
@@ -1494,9 +1578,11 @@ function updateStage() {
     backBtn.disabled = false;
     if (currentStage === stages.length - 1) {
       nextBtn.style.display = 'none';
+      document.getElementById('github-btn').style.display = 'block';
     } else {
       nextBtn.style.display = 'block';
       nextBtn.textContent = 'Next →';
+      document.getElementById('github-btn').style.display = 'none';
     }
     nextBtn.classList.remove('centered');
   }
