@@ -1,0 +1,1806 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Signet - Tutorial Demo</title>
+<style>
+@font-face {
+  font-family: 'Harlow';
+  src: url('data/HarlowSolid.ttf') format('truetype');
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: #121212;
+  color: #ECECEC;
+  font-family: Inter, system-ui, Segoe UI, Roboto, Arial, sans-serif;
+  height: 100vh;
+  overflow: hidden;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+}
+
+/* Main 3-panel layout */
+.container {
+  display: flex;
+  height: 100vh;
+  padding: 20px;
+  gap: 20px;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+/* Left panel - Phone UI */
+.phone-panel {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.phone-frame {
+  width: 320px;
+  height: calc(100vh - 80px);
+  max-height: 700px;
+  background: #000;
+  border-radius: 40px;
+  border: 4px solid #333;
+  overflow: hidden;
+  position: relative;
+  box-shadow: 0 0 40px rgba(0,0,0,0.5);
+}
+
+.phone-notch {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 150px;
+  height: 30px;
+  background: #000;
+  border-radius: 0 0 20px 20px;
+  z-index: 100;
+}
+
+.phone-screen {
+  width: 100%;
+  height: 100%;
+  overflow-y: auto;
+  background: #121212;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* Right panel - split vertically */
+.right-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Text panel (top right) */
+.text-panel {
+  flex: 4;
+  min-height: 0;
+  background: #1E1E1E;
+  border-radius: 16px;
+  padding: 30px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.text-content {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.text-content h2 {
+  font-size: 28px;
+  color: #8AB4F8;
+  margin-bottom: 20px;
+}
+
+.text-content p {
+  font-size: 16px;
+  line-height: 1.7;
+  margin-bottom: 15px;
+  color: #ddd;
+}
+
+.text-content .highlight {
+  color: #FFD700;
+  font-weight: 600;
+}
+
+.text-content .note {
+  background: #2a2000;
+  border-left: 4px solid #FFD700;
+  padding: 12px 16px;
+  margin: 15px 0;
+  border-radius: 0 8px 8px 0;
+  font-size: 14px;
+}
+
+.text-content .ssid {
+  font-family: monospace;
+  font-size: 20px;
+  color: #8AB4F8;
+  background: #1a1a1a;
+  padding: 10px 20px;
+  border-radius: 8px;
+  display: inline-block;
+  margin: 10px 0;
+}
+
+/* Navigation */
+.nav-buttons {
+  display: flex;
+  gap: 15px;
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid #333;
+}
+
+.nav-buttons button {
+  flex: 1;
+  padding: 15px 30px;
+  border: none;
+  border-radius: 10px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.nav-buttons .back-btn {
+  background: #333;
+  color: #fff;
+}
+
+.nav-buttons .back-btn:hover {
+  background: #444;
+}
+
+.nav-buttons .back-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.nav-buttons .next-btn {
+  background: #8AB4F8;
+  color: #000;
+}
+
+.nav-buttons .next-btn:hover {
+  background: #a8c8fa;
+}
+
+.nav-buttons .next-btn.centered {
+  flex: none;
+  width: 50%;
+  margin: 0 auto;
+}
+
+.stage-indicator {
+  text-align: center;
+  font-size: 14px;
+  color: #666;
+  margin-top: 10px;
+}
+
+/* Photo panel (bottom right) */
+.photo-panel {
+  flex: 6;
+  min-height: 0;
+  background: #1E1E1E;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  position: relative;
+  overflow: hidden;
+}
+
+.photo-container {
+  position: relative;
+  display: inline-block;
+}
+
+.photo-panel img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: 8px;
+}
+
+/* LED Glow Overlay */
+.led-glow {
+  position: absolute;
+  width: 35px;
+  height: 35px;
+  border-radius: 50%;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.led-glow.visible {
+  opacity: 1;
+}
+
+.led-glow.blue-pulse {
+  background: radial-gradient(circle, rgba(33, 150, 243, 1) 0%, rgba(33, 150, 243, 0.6) 40%, rgba(33, 150, 243, 0) 70%);
+}
+
+.led-glow.blue-pulse.visible {
+  box-shadow: 0 0 20px 10px rgba(33, 150, 243, 0.7);
+  animation: bluePulse 1.5s ease-in-out infinite;
+}
+
+@keyframes bluePulse {
+  0%, 100% {
+    opacity: 0.4;
+    transform: scale(0.8);
+    box-shadow: 0 0 15px 5px rgba(33, 150, 243, 0.5);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.2);
+    box-shadow: 0 0 45px 22px rgba(33, 150, 243, 1);
+  }
+}
+
+/* ========== Phone UI Styles (from The Signet) ========== */
+.phone-screen {
+  --bg: #121212;
+  --card: #1E1E1E;
+  --text: #ECECEC;
+  --muted: #B0B0B0;
+  --accent: #8AB4F8;
+  --primary: #8AB4F8;
+}
+
+.phone-screen .appbar {
+  text-align: center;
+  padding: 12px;
+  font-family: 'Harlow', cursive;
+  font-size: 28px;
+  font-weight: 400;
+  color: #ddd;
+  border-bottom: 1px solid #222;
+  padding-top: 35px;
+}
+
+.phone-screen .wrap {
+  max-width: 420px;
+  margin: 0 auto;
+  padding: 10px;
+}
+
+.phone-screen .grid {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.phone-screen .row-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.phone-screen .card {
+  background: var(--card);
+  border: 1px solid #2A2A2A;
+  border-radius: 12px;
+  padding: 12px;
+  transition: box-shadow 0.3s, border-color 0.3s;
+}
+
+.phone-screen .card.highlighted {
+  border-color: #8AB4F8;
+  box-shadow: 0 0 20px rgba(138, 180, 248, 0.3);
+}
+
+.phone-screen .card h3 {
+  font-size: 11px;
+  font-weight: 600;
+  color: #fff;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  margin-bottom: 8px;
+}
+
+.phone-screen .seg {
+  display: flex;
+  gap: 6px;
+}
+
+.phone-screen .seg button {
+  flex: 1;
+  border: 0;
+  border-radius: 8px;
+  padding: 8px 4px;
+  background: #171717;
+  border: 1px solid #2A2A2A;
+  color: #ddd;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.phone-screen .seg button.active {
+  background: var(--accent);
+  color: #000;
+  border-color: var(--accent);
+}
+
+.phone-screen .color-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.phone-screen .color {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: 1px solid #2A2A2A;
+  cursor: pointer;
+}
+
+.phone-screen .color.active {
+  outline: 2px solid var(--accent);
+}
+
+.phone-screen .color.red { background: #f44336; }
+.phone-screen .color.green { background: #4caf50; }
+.phone-screen .color.blue { background: #2196f3; }
+.phone-screen .color.custom { background: linear-gradient(135deg, #f44, #ff0, #0f0, #0ff, #00f, #f0f, #f44); }
+
+.phone-screen .dazzle-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.phone-screen .dazzle-row span {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.phone-screen .switch {
+  position: relative;
+  width: 44px;
+  height: 24px;
+}
+
+.phone-screen .switch input { display: none; }
+
+.phone-screen .slider {
+  position: absolute;
+  cursor: pointer;
+  inset: 0;
+  background: #333;
+  border-radius: 999px;
+  transition: .2s;
+}
+
+.phone-screen .slider:before {
+  content: "";
+  position: absolute;
+  height: 18px;
+  width: 18px;
+  left: 3px;
+  bottom: 3px;
+  background: #bbb;
+  border-radius: 50%;
+  transition: .2s;
+}
+
+.phone-screen input:checked + .slider { background: var(--accent); }
+.phone-screen input:checked + .slider:before { transform: translateX(20px); background: #111; }
+
+.phone-screen .wpm-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.phone-screen .wpm-val {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--accent);
+  min-width: 60px;
+}
+
+.phone-screen .wpm-val small {
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.phone-screen .wpm-slider { flex: 1; }
+
+.phone-screen .wpm-slider input[type="range"] {
+  -webkit-appearance: none;
+  width: 100%;
+  height: 6px;
+  border-radius: 3px;
+  background: #333;
+}
+
+.phone-screen .wpm-slider input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+  border: 2px solid #222;
+}
+
+.phone-screen .wpm-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 9px;
+  color: #666;
+  margin-top: 4px;
+  padding: 0 2px;
+}
+
+.phone-screen .msg-input {
+  width: 100%;
+  min-height: 72px;
+  background: #151515;
+  border: 1px solid #2A2A2A;
+  border-radius: 10px;
+  padding: 10px;
+  color: #eee;
+  font-size: 16px;
+  outline: none;
+  resize: none;
+  font-family: inherit;
+  line-height: 1.4;
+}
+
+.phone-screen .msg-hint {
+  font-size: 13px;
+  color: #FFD700;
+  margin: 6px 0;
+  text-align: center;
+}
+
+.phone-screen .msg-header {
+  display: flex;
+  align-items: baseline;
+}
+
+.phone-screen .max-hint {
+  font-size: 10px;
+  color: #666;
+  font-weight: 400;
+  margin-left: 6px;
+}
+
+.phone-screen .btn-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.phone-screen .btn-row button {
+  flex: 1;
+  border: 0;
+  border-radius: 10px;
+  padding: 10px;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.phone-screen .btn-row .play { background: var(--primary); color: #000; }
+.phone-screen .btn-row .stop { background: transparent; color: #fff; border: 1px solid #333; }
+
+.phone-screen .status {
+  text-align: center;
+  font-size: 11px;
+  color: #666;
+  margin-top: 6px;
+}
+
+.phone-screen .footer {
+  text-align: center;
+  font-size: 14px;
+  color: #FFD700;
+  font-weight: 700;
+  margin-top: 10px;
+}
+
+.phone-screen .version {
+  text-align: center;
+  font-size: 11px;
+  color: #666;
+  margin-top: 6px;
+}
+
+.phone-screen .help-btn {
+  display: inline-block;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #333;
+  color: #ccc;
+  text-decoration: none;
+  font-size: 16px;
+  line-height: 28px;
+  text-align: center;
+  margin-right: 8px;
+  vertical-align: middle;
+  transition: transform 0.4s ease, background 0.4s ease;
+}
+
+.phone-screen .help-btn.pressing {
+  transform: scale(0.85);
+  background: #8AB4F8;
+  color: #000;
+}
+
+/* Splash screen */
+.phone-screen #splash {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,.92);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .3s;
+}
+
+.phone-screen #splash.visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.phone-screen #splash img {
+  max-width: 90%;
+  max-height: 60%;
+  border-radius: 12px;
+  box-shadow: 0 0 40px rgba(0,0,0,.7);
+}
+
+.phone-screen #splash p {
+  color: #888;
+  font-size: 14px;
+  margin-top: 16px;
+  font-style: italic;
+}
+
+/* Help page overlay */
+.phone-screen #help-overlay {
+  position: absolute;
+  inset: 0;
+  background: #121212;
+  z-index: 9998;
+  padding: 8px;
+  padding-top: 35px;
+  overflow: hidden;
+  display: none;
+  flex-direction: column;
+}
+
+.phone-screen #help-overlay.visible {
+  display: flex;
+  animation: helpSlideIn 0.4s ease-out;
+}
+
+.phone-screen #help-overlay.closing {
+  animation: helpSlideOut 0.6s ease-in forwards;
+}
+
+@keyframes helpSlideIn {
+  0% {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes helpSlideOut {
+  0% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+}
+
+.phone-screen #help-overlay h1 {
+  font-size: 14px;
+  margin-bottom: 6px;
+  text-align: center;
+}
+
+.phone-screen #help-overlay .back {
+  display: block;
+  text-align: center;
+  color: #8AB4F8;
+  margin-bottom: 6px;
+  cursor: pointer;
+  font-size: 11px;
+  transition: transform 0.3s ease, color 0.3s ease, background 0.3s ease;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+.phone-screen #help-overlay .back.pressing {
+  transform: scale(0.95);
+  background: #8AB4F8;
+  color: #000;
+}
+
+.phone-screen #help-overlay h2 {
+  font-size: 10px;
+  color: #888;
+  margin: 6px 0 4px;
+  border-bottom: 1px solid #333;
+  padding-bottom: 2px;
+}
+
+.phone-screen #help-overlay table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 9px;
+}
+
+.phone-screen #help-overlay td, .phone-screen #help-overlay th {
+  padding: 2px 3px;
+  border: 1px solid #333;
+  text-align: left;
+}
+
+.phone-screen #help-overlay th {
+  background: #222;
+  color: #888;
+  font-weight: 600;
+}
+
+.phone-screen #help-overlay .code {
+  font-family: monospace;
+  letter-spacing: 1px;
+}
+
+/* Intro/Outro screens (non-phone states) */
+.phone-screen .intro-screen {
+  display: none;
+  height: 100%;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  text-align: center;
+}
+
+.phone-screen .intro-screen.visible {
+  display: flex;
+}
+
+.phone-screen .intro-screen .wifi-icon {
+  font-size: 80px;
+  margin-bottom: 20px;
+}
+
+.phone-screen .intro-screen h2 {
+  font-family: 'Harlow', cursive;
+  font-size: 32px;
+  color: #8AB4F8;
+  margin-bottom: 10px;
+}
+
+.phone-screen .intro-screen p {
+  color: #888;
+  font-size: 14px;
+}
+
+/* Generic home screen */
+.phone-screen .home-screen {
+  display: none;
+  height: 100%;
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+  padding: 40px 20px 20px;
+  flex-direction: column;
+}
+
+.phone-screen .home-screen.visible {
+  display: flex;
+}
+
+.phone-screen .home-screen .status-bar {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: #fff;
+  margin-bottom: 30px;
+}
+
+.phone-screen .home-screen .time {
+  font-weight: 600;
+}
+
+.phone-screen .home-screen .icons {
+  display: flex;
+  gap: 8px;
+}
+
+.phone-screen .home-screen .app-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 20px;
+  flex: 1;
+}
+
+.phone-screen .home-screen .app {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.phone-screen .home-screen .app-icon {
+  width: 54px;
+  height: 54px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+}
+
+.phone-screen .home-screen .app-name {
+  font-size: 10px;
+  color: #fff;
+  text-align: center;
+}
+
+.phone-screen .home-screen .dock {
+  display: flex;
+  justify-content: center;
+  gap: 25px;
+  padding: 15px;
+  background: rgba(255,255,255,0.1);
+  border-radius: 20px;
+  margin-top: auto;
+}
+
+.phone-screen .home-screen .dock .app-icon {
+  width: 50px;
+  height: 50px;
+}
+
+/* WiFi Settings Screen */
+.phone-screen .wifi-screen {
+  display: none;
+  position: absolute;
+  top: -100%;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: #1c1c1e;
+  padding: 40px 0 0;
+  flex-direction: column;
+  z-index: 50;
+  transition: top 0.5s ease-out;
+}
+
+.phone-screen .wifi-screen.visible {
+  display: flex;
+}
+
+.phone-screen .wifi-screen.slide-down {
+  top: 0;
+}
+
+.phone-screen .wifi-screen .wifi-header {
+  text-align: center;
+  padding: 15px;
+  border-bottom: 1px solid #333;
+}
+
+.phone-screen .wifi-screen .wifi-header h3 {
+  font-size: 18px;
+  color: #fff;
+  font-weight: 600;
+}
+
+.phone-screen .wifi-screen .wifi-toggle {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 15px 20px;
+  background: #2c2c2e;
+  margin: 20px 15px 10px;
+  border-radius: 10px;
+}
+
+.phone-screen .wifi-screen .wifi-toggle span {
+  color: #fff;
+  font-size: 16px;
+}
+
+.phone-screen .wifi-screen .wifi-toggle .toggle-on {
+  background: #34C759;
+  width: 50px;
+  height: 30px;
+  border-radius: 15px;
+  position: relative;
+}
+
+.phone-screen .wifi-screen .wifi-toggle .toggle-on::after {
+  content: '';
+  position: absolute;
+  right: 3px;
+  top: 3px;
+  width: 24px;
+  height: 24px;
+  background: #fff;
+  border-radius: 50%;
+}
+
+.phone-screen .wifi-screen .networks-label {
+  color: #8e8e93;
+  font-size: 13px;
+  text-transform: uppercase;
+  padding: 20px 20px 10px;
+}
+
+.phone-screen .wifi-screen .network-list {
+  background: #2c2c2e;
+  margin: 0 15px;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.phone-screen .wifi-screen .network-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 20px;
+  border-bottom: 1px solid #3a3a3c;
+  color: #fff;
+  font-size: 16px;
+  transition: background 0.3s;
+}
+
+.phone-screen .wifi-screen .network-item:last-child {
+  border-bottom: none;
+}
+
+.phone-screen .wifi-screen .network-item.signet {
+  color: #8AB4F8;
+  font-weight: 600;
+}
+
+.phone-screen .wifi-screen .network-item.selected {
+  background: #007AFF;
+}
+
+.phone-screen .wifi-screen .network-item.connected {
+  background: transparent;
+}
+
+.phone-screen .wifi-screen .network-item.connected::after {
+  content: '✓';
+  color: #34C759;
+  font-weight: bold;
+}
+
+.phone-screen .wifi-screen .signal {
+  color: #8e8e93;
+}
+
+.phone-screen .wifi-screen .network-item.signet .signal {
+  color: #8AB4F8;
+}
+
+/* LED blink animation for connection confirmation */
+.led-glow.blink-confirm {
+  animation: blinkConfirm 0.8s ease-in-out forwards;
+}
+
+@keyframes blinkConfirm {
+  0% { opacity: 1; box-shadow: 0 0 60px 30px rgba(33, 150, 243, 1), 0 0 90px 45px rgba(33, 150, 243, 0.5); }
+  10% { opacity: 0; box-shadow: none; }
+  20% { opacity: 1; box-shadow: 0 0 60px 30px rgba(33, 150, 243, 1), 0 0 90px 45px rgba(33, 150, 243, 0.5); }
+  30% { opacity: 0; box-shadow: none; }
+  40% { opacity: 1; box-shadow: 0 0 60px 30px rgba(33, 150, 243, 1), 0 0 90px 45px rgba(33, 150, 243, 0.5); }
+  50% { opacity: 0; box-shadow: none; }
+  60% { opacity: 1; box-shadow: 0 0 60px 30px rgba(33, 150, 243, 1), 0 0 90px 45px rgba(33, 150, 243, 0.5); }
+  70% { opacity: 0; box-shadow: none; }
+  100% { opacity: 0; box-shadow: none; }
+}
+
+/* Button press animation */
+@keyframes buttonPress {
+  0% { transform: scale(1); }
+  50% { transform: scale(0.95); background: #6a9bd8; }
+  100% { transform: scale(1); }
+}
+
+.phone-screen .btn-row .play.pressing {
+  animation: buttonPress 0.3s ease-out;
+}
+
+/* Red LED for Morse code */
+.led-glow.red-morse {
+  background: radial-gradient(circle, rgba(244, 67, 54, 1) 0%, rgba(244, 67, 54, 0.6) 40%, rgba(244, 67, 54, 0) 70%);
+}
+
+.led-glow.red-morse.on {
+  opacity: 1;
+  box-shadow: 0 0 60px 30px rgba(244, 67, 54, 1), 0 0 90px 45px rgba(244, 67, 54, 0.5);
+}
+
+.led-glow.red-morse.off {
+  opacity: 0;
+  box-shadow: none;
+}
+
+/* Dazzle effect - rapid RGB color cycling */
+.led-glow.dazzle {
+  opacity: 1;
+  animation: dazzleEffect 0.09s linear infinite;
+}
+
+@keyframes dazzleEffect {
+  0% {
+    background: radial-gradient(circle, rgba(244, 67, 54, 1) 0%, rgba(244, 67, 54, 0.6) 40%, rgba(244, 67, 54, 0) 70%);
+    box-shadow: 0 0 60px 30px rgba(244, 67, 54, 1), 0 0 90px 45px rgba(244, 67, 54, 0.5);
+  }
+  33% {
+    background: radial-gradient(circle, rgba(76, 175, 80, 1) 0%, rgba(76, 175, 80, 0.6) 40%, rgba(76, 175, 80, 0) 70%);
+    box-shadow: 0 0 60px 30px rgba(76, 175, 80, 1), 0 0 90px 45px rgba(76, 175, 80, 0.5);
+  }
+  66% {
+    background: radial-gradient(circle, rgba(33, 150, 243, 1) 0%, rgba(33, 150, 243, 0.6) 40%, rgba(33, 150, 243, 0) 70%);
+    box-shadow: 0 0 60px 30px rgba(33, 150, 243, 1), 0 0 90px 45px rgba(33, 150, 243, 0.5);
+  }
+  100% {
+    background: radial-gradient(circle, rgba(244, 67, 54, 1) 0%, rgba(244, 67, 54, 0.6) 40%, rgba(244, 67, 54, 0) 70%);
+    box-shadow: 0 0 60px 30px rgba(244, 67, 54, 1), 0 0 90px 45px rgba(244, 67, 54, 0.5);
+  }
+}
+
+/* LED indicator labels */
+.led-indicator {
+  position: absolute;
+  display: none;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.led-indicator.visible {
+  display: block;
+}
+
+.led-indicator .label {
+  font-size: 14px;
+  font-weight: 600;
+  color: #FFD700;
+  background: rgba(0, 0, 0, 0.8);
+  padding: 8px 12px;
+  border-radius: 4px;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+}
+
+.led-indicator .arrow-line {
+  display: inline-block;
+  margin-left: 10px;
+  width: 150px;
+  height: 2px;
+  background: #FFD700;
+  position: relative;
+}
+
+.led-indicator .arrow-line::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 0;
+  height: 0;
+  border-top: 6px solid transparent;
+  border-bottom: 6px solid transparent;
+  border-left: 10px solid #FFD700;
+}
+
+#rgb-indicator {
+  left: 10%;
+  top: 48%;
+}
+
+#rgb-indicator .arrow-line {
+  width: 287px;
+}
+
+#ir-indicator {
+  left: 10%;
+  top: 35%;
+}
+
+#ir-indicator .arrow-line {
+  width: 240px;
+}
+
+/* Main UI container */
+.phone-screen .main-ui {
+  display: none;
+}
+
+.phone-screen .main-ui.visible {
+  display: block;
+}
+</style>
+</head>
+<body>
+
+<div class="container">
+  <!-- Left Panel: Phone UI -->
+  <div class="phone-panel">
+    <div class="phone-frame">
+      <div class="phone-notch"></div>
+      <div class="phone-screen">
+
+        <!-- Intro screens (stages 1-3) -->
+        <div class="intro-screen" id="intro-screen">
+          <div class="wifi-icon">📱</div>
+          <h2 id="intro-title">The Signet</h2>
+          <p id="intro-subtitle">Power on to begin</p>
+        </div>
+
+        <!-- WiFi Settings Screen (stage 3) -->
+        <div class="wifi-screen" id="wifi-screen">
+          <div class="wifi-header">
+            <h3>Wi-Fi</h3>
+          </div>
+          <div class="wifi-toggle">
+            <span>Wi-Fi</span>
+            <div class="toggle-on"></div>
+          </div>
+          <div class="networks-label">Networks</div>
+          <div class="network-list">
+            <div class="network-item"><span>HomeNetwork_5G</span><span class="signal">📶</span></div>
+            <div class="network-item"><span>Neighbors_WiFi</span><span class="signal">📶</span></div>
+            <div class="network-item signet" id="signet-network"><span>The_Signet_A1B2C3</span><span class="signal">📶</span></div>
+            <div class="network-item"><span>CoffeeShop_Guest</span><span class="signal">📶</span></div>
+          </div>
+        </div>
+
+        <!-- Generic home screen (stage 2) -->
+        <div class="home-screen" id="home-screen">
+          <div class="status-bar">
+            <span class="time">9:41</span>
+            <div class="icons">📶 🔋</div>
+          </div>
+          <div class="app-grid">
+            <div class="app"><div class="app-icon" style="background:#34C759">💬</div><div class="app-name">Messages</div></div>
+            <div class="app"><div class="app-icon" style="background:#007AFF">📧</div><div class="app-name">Mail</div></div>
+            <div class="app"><div class="app-icon" style="background:#FF9500">🎵</div><div class="app-name">Music</div></div>
+            <div class="app"><div class="app-icon" style="background:#5856D6">📷</div><div class="app-name">Photos</div></div>
+            <div class="app"><div class="app-icon" style="background:#FF2D55">❤️</div><div class="app-name">Health</div></div>
+            <div class="app"><div class="app-icon" style="background:#00C7BE">🗺️</div><div class="app-name">Maps</div></div>
+            <div class="app"><div class="app-icon" style="background:#AF52DE">📅</div><div class="app-name">Calendar</div></div>
+            <div class="app"><div class="app-icon" style="background:#8E8E93">⚙️</div><div class="app-name">Settings</div></div>
+          </div>
+          <div class="dock">
+            <div class="app-icon" style="background:#34C759">📞</div>
+            <div class="app-icon" style="background:#007AFF">🌐</div>
+            <div class="app-icon" style="background:#FF9500">📧</div>
+            <div class="app-icon" style="background:#34C759">💬</div>
+          </div>
+        </div>
+
+        <!-- Splash screen (stage 4) -->
+        <div id="splash">
+          <img src="data/bb.jpg" alt="Big Brother">
+          <p>Click anywhere to send him a message...</p>
+        </div>
+
+        <!-- Help overlay (stage 12) -->
+        <div id="help-overlay">
+          <span class="back" onclick="hideHelp()">← Back to Control</span>
+          <h1>Morse Code Reference</h1>
+          <h2>Letters</h2>
+          <table>
+            <tr><th>Char</th><th>Code</th><th>Char</th><th>Code</th><th>Char</th><th>Code</th></tr>
+            <tr><td>A</td><td class="code">·−</td><td>J</td><td class="code">·−−−</td><td>S</td><td class="code">···</td></tr>
+            <tr><td>B</td><td class="code">−···</td><td>K</td><td class="code">−·−</td><td>T</td><td class="code">−</td></tr>
+            <tr><td>C</td><td class="code">−·−·</td><td>L</td><td class="code">·−··</td><td>U</td><td class="code">··−</td></tr>
+            <tr><td>D</td><td class="code">−··</td><td>M</td><td class="code">−−</td><td>V</td><td class="code">···−</td></tr>
+            <tr><td>E</td><td class="code">·</td><td>N</td><td class="code">−·</td><td>W</td><td class="code">·−−</td></tr>
+            <tr><td>F</td><td class="code">··−·</td><td>O</td><td class="code">−−−</td><td>X</td><td class="code">−··−</td></tr>
+            <tr><td>G</td><td class="code">−−·</td><td>P</td><td class="code">·−−·</td><td>Y</td><td class="code">−·−−</td></tr>
+            <tr><td>H</td><td class="code">····</td><td>Q</td><td class="code">−−·−</td><td>Z</td><td class="code">−−··</td></tr>
+            <tr><td>I</td><td class="code">··</td><td>R</td><td class="code">·−·</td><td></td><td></td></tr>
+          </table>
+          <h2>Numbers</h2>
+          <table>
+            <tr><th>Char</th><th>Code</th><th>Char</th><th>Code</th></tr>
+            <tr><td>0</td><td class="code">−−−−−</td><td>5</td><td class="code">·····</td></tr>
+            <tr><td>1</td><td class="code">·−−−−</td><td>6</td><td class="code">−····</td></tr>
+            <tr><td>2</td><td class="code">··−−−</td><td>7</td><td class="code">−−···</td></tr>
+            <tr><td>3</td><td class="code">···−−</td><td>8</td><td class="code">−−−··</td></tr>
+            <tr><td>4</td><td class="code">····−</td><td>9</td><td class="code">−−−−·</td></tr>
+          </table>
+          <h2>Prosigns</h2>
+          <table>
+            <tr><th>Tag</th><th>Code</th><th>Meaning</th></tr>
+            <tr><td>&lt;KA&gt;</td><td class="code">−·−·−</td><td>Starting signal</td></tr>
+            <tr><td>&lt;AR&gt;</td><td class="code">·−·−·</td><td>End of message</td></tr>
+          </table>
+        </div>
+
+        <!-- Main UI (stages 5-11, 13) -->
+        <div class="main-ui" id="main-ui">
+          <div class="appbar">The Signet</div>
+          <div class="wrap">
+            <div class="grid">
+
+              <div class="card" id="card-message">
+                <h3 class="msg-header">Message <span class="max-hint">(MAX 200 Characters)</span></h3>
+                <textarea class="msg-input" id="msg" placeholder="SOS" maxlength="200" rows="3">SOS</textarea>
+                <div class="msg-hint">A-Z 0-9 . , ? / - ( ) @ = space &lt;KA&gt; &lt;AR&gt;</div>
+                <div class="btn-row">
+                  <button class="play" id="play-btn">&#9654; Play</button>
+                  <button class="stop" id="stop-btn">&#9632; Stop</button>
+                </div>
+                <div class="status" id="status">Idle</div>
+              </div>
+
+              <div class="row-2">
+                <div class="card" id="card-mode">
+                  <h3>Mode</h3>
+                  <div class="seg" id="modeGroup">
+                    <button class="active" data-mode="DISCREET">IR</button>
+                    <button data-mode="VISIBLE">RGB</button>
+                  </div>
+                </div>
+                <div class="card" id="card-intensity">
+                  <h3>Intensity</h3>
+                  <div class="seg" id="intensityGroup">
+                    <button data-int="LOW">Lo</button>
+                    <button class="active" data-int="MED">Med</button>
+                    <button data-int="HIGH">Hi</button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="row-2">
+                <div class="card" id="card-color">
+                  <h3>Color</h3>
+                  <div class="color-row" id="colorGroup">
+                    <div class="color red active" data-color="RED"></div>
+                    <div class="color green" data-color="GREEN"></div>
+                    <div class="color blue" data-color="BLUE"></div>
+                    <div class="color custom" data-color="CUSTOM"></div>
+                  </div>
+                </div>
+                <div class="card" id="card-dazzle">
+                  <h3>Dazzle</h3>
+                  <div class="dazzle-row">
+                    <label class="switch"><input type="checkbox" id="dazzle"><span class="slider"></span></label>
+                    <span>RGB flash</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="card" id="card-speed">
+                <h3>Speed</h3>
+                <div class="wpm-row">
+                  <div class="wpm-val"><span id="wpmDisplay">10</span> <small>WPM</small></div>
+                  <div class="wpm-slider">
+                    <input type="range" id="wpm" min="5" max="20" step="5" value="10">
+                    <div class="wpm-labels"><span>5</span><span>10</span><span>15</span><span>20</span></div>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+            <div class="footer"><a href="#" class="help-btn" id="help-btn">?</a>1984 was not an instruction manual</div>
+            <div class="version">Firmware v1.1.1</div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- Right Panel -->
+  <div class="right-panel">
+    <!-- Text Panel (top) -->
+    <div class="text-panel">
+      <div class="text-content" id="text-content">
+        <!-- Content populated by JavaScript -->
+      </div>
+      <div class="nav-buttons">
+        <button class="back-btn" id="back-btn" disabled>← Back</button>
+        <button class="next-btn" id="next-btn">Next →</button>
+      </div>
+      <div class="stage-indicator" id="stage-indicator">Step 1 of 13</div>
+    </div>
+
+    <!-- Photo Panel (bottom) -->
+    <div class="photo-panel">
+      <div class="photo-container">
+        <img src="data/SW_1_OFF_NB.png" alt="The Signet" id="device-photo">
+        <div class="led-glow blue-pulse" id="led-rgb" style="top: 46.8%; left: 50.5%; transform: translate(-50%, -50%);"></div>
+        <div class="led-indicator" id="rgb-indicator">
+          <span class="label">RGB LED (Visible)<span class="arrow-line"></span></span>
+        </div>
+        <div class="led-indicator" id="ir-indicator">
+          <span class="label">IR LED (Discreet)<span class="arrow-line"></span></span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const stages = [
+  {
+    id: 1,
+    title: "The Signet",
+    photo: "off",
+    screen: "intro",
+    introTitle: "The Signet",
+    introSubtitle: "Power on to begin",
+    introIcon: "📱",
+    highlight: null,
+    content: `
+      <h2>The Signet</h2>
+      <p>A covert Morse code beacon designed for protest messaging and video steganography.</p>
+      <p>Embed invisible messages into recorded video using IR light, or broadcast visible signals with an RGB LED.</p>
+      <p><strong>No app required. No logs. No telemetry.</strong></p>
+    `
+  },
+  {
+    id: 2,
+    title: "Powering On",
+    photo: "on",
+    screen: "home",
+    highlight: null,
+    content: `
+      <h2>Powering On</h2>
+      <p>Slide the power switch to the ON position.</p>
+      <p>A pulsing blue LED indicates The Signet is ready and broadcasting its WiFi Access Point.</p>
+    `
+  },
+  {
+    id: 3,
+    title: "Connecting",
+    photo: "on",
+    screen: "wifi",
+    highlight: null,
+    content: `
+      <h2>Connecting</h2>
+      <p>On your phone, open WiFi settings and look for a network named:</p>
+      <p class="ssid">The_Signet_A1B2C3</p>
+      <p>(The last 6 characters are unique to your device)</p>
+      <p>No password required. Once connected, a captive portal will open automatically.</p>
+      <div class="note">⚠️ <strong>NOTE:</strong> If the captive portal does not launch automatically, open your browser and navigate to <strong>192.168.4.1</strong> to access your Signet's control panel.</div>
+    `
+  },
+  {
+    id: 4,
+    title: "Welcome",
+    photo: "on",
+    screen: "splash",
+    highlight: null,
+    content: `
+      <h2>Welcome</h2>
+      <p>The splash screen appears when you first connect.</p>
+      <p>Tap anywhere to dismiss and access the control panel.</p>
+    `
+  },
+  {
+    id: 5,
+    title: "Your Message",
+    photo: "on",
+    screen: "main",
+    highlight: "card-message",
+    content: `
+      <h2>Your Message</h2>
+      <p>Enter the text you want to transmit in Morse code.</p>
+      <p>Supported characters: A-Z, 0-9, and common punctuation.</p>
+      <p>Optionally, use <strong>"&lt;KA&gt;"</strong> to signal the start of transmission and use <strong>"&lt;AR&gt;"</strong> to signal end of message.</p>
+      <p>Maximum 200 characters.</p>
+    `
+  },
+  {
+    id: 6,
+    title: "Transmission Mode",
+    photo: "on",
+    screen: "main",
+    highlight: "card-mode",
+    content: `
+      <h2>Transmission Mode</h2>
+      <p><strong class="highlight">IR (Discreet):</strong> Invisible infrared light. Perfect for embedding hidden messages in video recordings. Undetectable to the naked eye.</p>
+      <p><strong class="highlight">RGB (Visible):</strong> Colored LED light. Use for visible signaling or when stealth isn't required.</p>
+    `
+  },
+  {
+    id: 7,
+    title: "Intensity",
+    photo: "on",
+    screen: "main",
+    highlight: "card-intensity",
+    content: `
+      <h2>Intensity</h2>
+      <p>Control the brightness of your transmission.</p>
+      <p><strong class="highlight">Lo:</strong> Subtle, power-efficient. Best for close-range or battery conservation.</p>
+      <p><strong class="highlight">Med:</strong> Balanced brightness and power consumption.</p>
+      <p><strong class="highlight">Hi:</strong> Maximum brightness for long-range visibility or challenging lighting conditions.</p>
+    `
+  },
+  {
+    id: 8,
+    title: "Color Selection",
+    photo: "on",
+    screen: "main",
+    highlight: "card-color",
+    content: `
+      <h2>Color Selection</h2>
+      <p>Choose your RGB LED color when in Visible mode.</p>
+      <p>Select from preset colors (Red, Green, Blue) or tap the color wheel to choose a custom color.</p>
+      <div class="note">⚠️ <strong>NOTE:</strong> Color selection only applies to RGB mode, not IR.</div>
+      <div class="note">⚠️ <strong>NOTE:</strong> Custom colors use more battery power than preset colors.</div>
+    `
+  },
+  {
+    id: 9,
+    title: "Dazzle Effect",
+    photo: "on",
+    screen: "main",
+    highlight: "card-dazzle",
+    content: `
+      <h2>Dazzle Effect</h2>
+      <p>When enabled, a rapid RGB color flash plays between message loops.</p>
+      <p>Use this to draw attention or create a visual marker in recordings.</p>
+      <div class="note">⚠️ <strong>NOTE:</strong> Dazzle only applies to RGB mode and increases battery consumption.</div>
+    `
+  },
+  {
+    id: 10,
+    title: "Transmission Speed",
+    photo: "on",
+    screen: "main",
+    highlight: "card-speed",
+    content: `
+      <h2>Transmission Speed</h2>
+      <p>Adjust the Words Per Minute (WPM) of your Morse code transmission.</p>
+      <p><strong class="highlight">5 WPM:</strong> Slow, easy to decode manually.</p>
+      <p><strong class="highlight">10 WPM:</strong> Standard speed, good balance.</p>
+      <p><strong class="highlight">15-20 WPM:</strong> Fast, requires experience or software to decode.</p>
+    `
+  },
+  {
+    id: 11,
+    title: "Transmitting",
+    photo: "on",
+    screen: "main",
+    highlight: "card-message",
+    content: `
+      <h2>Transmitting</h2>
+      <p>Press <strong class="highlight">Play</strong> to begin broadcasting your message in Morse code. The message will repeat continuously.</p>
+      <p>Press <strong class="highlight">Stop</strong> to end transmission.</p>
+      <p>The status indicator shows "Playing..." or "Idle" to confirm the current state.</p>
+      <div class="note">⚠️ <strong>NOTE:</strong> The WiFi Access Point automatically shuts down after 90 seconds of inactivity to conserve battery.</div>
+    `
+  },
+  {
+    id: 12,
+    title: "Morse Code Reference",
+    photo: "on",
+    screen: "help",
+    highlight: null,
+    content: `
+      <h2>Morse Code Reference</h2>
+      <p>Tap the <strong class="highlight">?</strong> icon to access the built-in Morse code reference chart.</p>
+      <p>Includes letters, numbers, punctuation, prosigns, and timing information.</p>
+      <p>Useful for learning Morse or verifying your message encoding.</p>
+    `
+  },
+  {
+    id: 13,
+    title: "Ready to Signal",
+    photo: "on",
+    screen: "main",
+    highlight: null,
+    content: `
+      <h2>Ready to Signal</h2>
+      <p>The Signet is your tool for covert communication and free expression.</p>
+      <p>Embed your message in video, signal across a crowd, or create art with light.</p>
+      <p><strong>No accounts. No tracking. No Big Brother.</strong></p>
+      <p style="font-size: 20px; color: #8AB4F8; margin-top: 30px;"><strong>Stay safe. Stay free.</strong></p>
+    `
+  }
+];
+
+let currentStage = 0;
+
+const textContent = document.getElementById('text-content');
+const stageIndicator = document.getElementById('stage-indicator');
+const backBtn = document.getElementById('back-btn');
+const nextBtn = document.getElementById('next-btn');
+const devicePhoto = document.getElementById('device-photo');
+const introScreen = document.getElementById('intro-screen');
+const introTitle = document.getElementById('intro-title');
+const introSubtitle = document.getElementById('intro-subtitle');
+const homeScreen = document.getElementById('home-screen');
+const wifiScreen = document.getElementById('wifi-screen');
+const signetNetwork = document.getElementById('signet-network');
+const splash = document.getElementById('splash');
+const mainUI = document.getElementById('main-ui');
+const helpOverlay = document.getElementById('help-overlay');
+const helpBtn = document.getElementById('help-btn');
+const playBtn = document.getElementById('play-btn');
+const stopBtn = document.getElementById('stop-btn');
+const statusEl = document.getElementById('status');
+const ledRgb = document.getElementById('led-rgb');
+const rgbIndicator = document.getElementById('rgb-indicator');
+const irIndicator = document.getElementById('ir-indicator');
+const modeButtons = document.querySelectorAll('#modeGroup button');
+
+function updateStage() {
+  const stage = stages[currentStage];
+
+  // Update text content
+  textContent.innerHTML = stage.content;
+  stageIndicator.textContent = `Step ${stage.id} of ${stages.length}`;
+
+  // Update nav buttons
+  if (currentStage === 0) {
+    backBtn.style.display = 'none';
+    nextBtn.textContent = 'START';
+    nextBtn.classList.add('centered');
+  } else {
+    backBtn.style.display = 'block';
+    backBtn.disabled = false;
+    if (currentStage === stages.length - 1) {
+      nextBtn.style.display = 'none';
+    } else {
+      nextBtn.style.display = 'block';
+      nextBtn.textContent = 'Next →';
+    }
+    nextBtn.classList.remove('centered');
+  }
+
+  // Update photo
+  devicePhoto.src = stage.photo === 'off'
+    ? 'data/SW_1_OFF_NB.png'
+    : 'data/SW_1_ON_NB.png';
+
+  // Update LED glow - show blue pulse on step 2, blink confirm handled separately for step 3
+  ledRgb.classList.remove('visible', 'blink-confirm', 'blue-pulse', 'dazzle', 'red-morse', 'on', 'off');
+  if (stage.id === 2) {
+    // Step 2: LED at locked position with pulsing animation
+    ledRgb.style.top = '46.8%';
+    ledRgb.style.left = '50.5%';
+    ledRgb.classList.add('blue-pulse', 'visible');
+  }
+  // Step 3 LED animation is triggered in the wifi case above
+
+  // Update phone screen
+  introScreen.classList.remove('visible');
+  homeScreen.classList.remove('visible');
+  wifiScreen.classList.remove('visible', 'slide-down');
+  splash.classList.remove('visible');
+  mainUI.classList.remove('visible');
+  helpOverlay.classList.remove('visible');
+
+  // Reset WiFi screen state
+  signetNetwork.classList.remove('selected', 'connected');
+
+  // Reset dazzle checkbox
+  document.getElementById('dazzle').checked = false;
+
+  // Remove all highlights
+  document.querySelectorAll('.card').forEach(c => c.classList.remove('highlighted'));
+
+  // Hide LED indicators by default
+  rgbIndicator.classList.remove('visible');
+  irIndicator.classList.remove('visible');
+
+  // Set mode buttons based on step (RGB from step 7 onwards, step 6 animates)
+  const useRgbMode = stage.id > 6;
+  modeButtons.forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.mode === (useRgbMode ? 'VISIBLE' : 'DISCREET'));
+  });
+
+  switch(stage.screen) {
+    case 'intro':
+      introScreen.classList.add('visible');
+      introTitle.textContent = stage.introTitle;
+      introSubtitle.textContent = stage.introSubtitle;
+      document.querySelector('.intro-screen .wifi-icon').textContent = stage.introIcon;
+      break;
+    case 'home':
+      homeScreen.classList.add('visible');
+      break;
+    case 'wifi':
+      wifiScreen.classList.add('visible');
+      // Animate slide down
+      setTimeout(() => {
+        wifiScreen.classList.add('slide-down');
+      }, 100);
+      // Highlight Signet network
+      setTimeout(() => {
+        signetNetwork.classList.add('selected');
+      }, 1000);
+      // Show connected state
+      setTimeout(() => {
+        signetNetwork.classList.remove('selected');
+        signetNetwork.classList.add('connected');
+        // Trigger LED blink confirmation at Step 3 position
+        ledRgb.style.top = '48.8%';
+        ledRgb.style.left = '52%';
+        ledRgb.classList.remove('visible', 'blue-pulse');
+        ledRgb.classList.add('visible', 'blink-confirm');
+      }, 2000);
+      break;
+    case 'splash':
+      mainUI.classList.add('visible');
+      splash.classList.add('visible');
+      break;
+    case 'main':
+      mainUI.classList.add('visible');
+      if (stage.highlight) {
+        document.getElementById(stage.highlight).classList.add('highlighted');
+      }
+      // Step 6: Show RGB mode selection and LED indicators
+      if (stage.id === 6) {
+        // Show LED indicators
+        rgbIndicator.classList.add('visible');
+        irIndicator.classList.add('visible');
+
+        // Animate RGB mode selection
+        setTimeout(() => {
+          modeButtons.forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.mode === 'VISIBLE');
+          });
+        }, 800);
+      }
+
+      // Step 9: Show dazzle effect being turned on and off
+      if (stage.id === 9) {
+        const dazzleCheckbox = document.getElementById('dazzle');
+
+        // Position LED
+        ledRgb.style.top = '48.8%';
+        ledRgb.style.left = '52%';
+
+        // Turn on dazzle switch after 500ms
+        setTimeout(() => {
+          if (stages[currentStage].id !== 9) return;
+          dazzleCheckbox.checked = true;
+
+          // Start dazzle LED effect after switch is on
+          setTimeout(() => {
+            if (stages[currentStage].id !== 9) return;
+            ledRgb.classList.remove('blue-pulse', 'blink-confirm', 'red-morse', 'on', 'off');
+            ledRgb.classList.add('dazzle', 'visible');
+
+            // Turn off dazzle LED after 1 second
+            setTimeout(() => {
+              if (stages[currentStage].id !== 9) return;
+              ledRgb.classList.remove('dazzle', 'visible');
+              // Turn off toggle switch after 1 more second
+              setTimeout(() => {
+                if (stages[currentStage].id !== 9) return;
+                dazzleCheckbox.checked = false;
+              }, 1000);
+            }, 1000);
+          }, 300);
+        }, 500);
+      }
+
+      // Update status and animate for stages 11 and 13
+      if (stage.id === 11 || stage.id === 13) {
+        stopMorseAnimation();
+        statusEl.textContent = 'Playing...';
+        if (stage.id === 11) {
+          // Animate play button press for stage 11
+          setTimeout(() => {
+            if (stages[currentStage].id !== 11) return;
+            playBtn.classList.add('pressing');
+            setTimeout(() => {
+              if (stages[currentStage].id !== 11) return;
+              playBtn.classList.remove('pressing');
+              // Start SOS Morse code animation
+              playSosMorse();
+            }, 300);
+          }, 500);
+        } else {
+          // Start SOS immediately for stage 13
+          playSosMorse();
+        }
+      } else {
+        statusEl.textContent = 'Idle';
+        stopMorseAnimation();
+      }
+      break;
+    case 'help':
+      mainUI.classList.add('visible');
+      // Start SOS animation for step 12
+      stopMorseAnimation();
+      statusEl.textContent = 'Playing...';
+      playSosMorse();
+      const backLink = document.querySelector('#help-overlay .back');
+      // Animate help button press then show overlay
+      setTimeout(() => {
+        if (stages[currentStage].id !== 12) return;
+        helpBtn.classList.add('pressing');
+        setTimeout(() => {
+          if (stages[currentStage].id !== 12) return;
+          helpBtn.classList.remove('pressing');
+          helpOverlay.classList.add('visible');
+          // After viewing help, animate back link press
+          setTimeout(() => {
+            if (stages[currentStage].id !== 12) return;
+            backLink.classList.add('pressing');
+            setTimeout(() => {
+              if (stages[currentStage].id !== 12) return;
+              backLink.classList.remove('pressing');
+              helpOverlay.classList.add('closing');
+              setTimeout(() => {
+                if (stages[currentStage].id !== 12) return;
+                helpOverlay.classList.remove('visible', 'closing');
+              }, 600);
+            }, 500);
+          }, 3000);
+        }, 500);
+      }, 1500);
+      break;
+  }
+}
+
+function nextStage() {
+  if (currentStage < stages.length - 1) {
+    currentStage++;
+    updateStage();
+  }
+}
+
+function prevStage() {
+  if (currentStage > 0) {
+    currentStage--;
+    updateStage();
+  }
+}
+
+function hideHelp() {
+  helpOverlay.classList.remove('visible');
+}
+
+// Event listeners
+backBtn.addEventListener('click', prevStage);
+nextBtn.addEventListener('click', nextStage);
+helpBtn.addEventListener('click', (e) => {
+  e.preventDefault();
+  helpOverlay.classList.add('visible');
+});
+
+// Keyboard navigation
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowRight' || e.key === ' ') {
+    nextStage();
+  } else if (e.key === 'ArrowLeft') {
+    prevStage();
+  }
+});
+
+// Morse code animation for SOS
+let morseTimeout = null;
+let morseRunning = false;
+
+function playSosMorse() {
+  morseRunning = true;
+  // SOS: ... --- ... (dit dit dit, dah dah dah, dit dit dit)
+  // Timing at 10 WPM: dit = 1200/10 = 120ms
+  const dit = 120;        // 1 unit
+  const dah = 360;        // 3 units (3 × dit)
+  const gapIntra = 120;   // 1 unit (between elements in same letter)
+  const gapLetter = 360;  // 3 units (between letters)
+  const loopGap = 1000;   // pause before repeat
+
+  // SOS pattern: S(··· ) O(−−−) S(···)
+  const pattern = [
+    // S: · · ·
+    { on: true, duration: dit }, { on: false, duration: gapIntra },
+    { on: true, duration: dit }, { on: false, duration: gapIntra },
+    { on: true, duration: dit }, { on: false, duration: gapLetter },
+    // O: − − −
+    { on: true, duration: dah }, { on: false, duration: gapIntra },
+    { on: true, duration: dah }, { on: false, duration: gapIntra },
+    { on: true, duration: dah }, { on: false, duration: gapLetter },
+    // S: · · ·
+    { on: true, duration: dit }, { on: false, duration: gapIntra },
+    { on: true, duration: dit }, { on: false, duration: gapIntra },
+    { on: true, duration: dit }, { on: false, duration: loopGap }
+  ];
+
+  // Set LED to red morse mode and position for step 11
+  ledRgb.style.top = '48.8%';
+  ledRgb.style.left = '52%';
+  ledRgb.classList.remove('blue-pulse', 'blink-confirm', 'visible');
+  ledRgb.classList.add('red-morse');
+
+  let index = 0;
+
+  function playNext() {
+    if (!morseRunning) {
+      ledRgb.classList.remove('on', 'red-morse');
+      return;
+    }
+
+    if (index >= pattern.length) {
+      index = 0;  // loop
+    }
+
+    const step = pattern[index];
+    if (step.on) {
+      ledRgb.classList.add('on');
+      ledRgb.classList.remove('off');
+    } else {
+      ledRgb.classList.remove('on');
+      ledRgb.classList.add('off');
+    }
+
+    index++;
+    morseTimeout = setTimeout(playNext, step.duration);
+  }
+
+  playNext();
+}
+
+function stopMorseAnimation() {
+  morseRunning = false;
+  if (morseTimeout) {
+    clearTimeout(morseTimeout);
+    morseTimeout = null;
+  }
+  ledRgb.classList.remove('on', 'off', 'red-morse');
+}
+
+// Initialize
+updateStage();
+</script>
+
+</body>
+</html>
