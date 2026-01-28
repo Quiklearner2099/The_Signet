@@ -31,7 +31,7 @@
 
 ### **NEW TO THE SIGNET?**
 
-<a href="Tutorial/tutorial_demo.html">
+<a href="https://quiklearner2099.github.io/The_Signet/Tutorial/tutorial_demo.html">
   <img src="https://img.shields.io/badge/%F0%9F%8E%93_INTERACTIVE_TUTORIAL-START_HERE-brightgreen?style=for-the-badge&labelColor=black" alt="Interactive Tutorial">
 </a>
 
