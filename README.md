@@ -25,7 +25,21 @@
 
 </div>
 
-<hr/>
+<div align="center">
+
+---
+
+### **NEW TO THE SIGNET?**
+
+<a href="Tutorial/tutorial_demo.html">
+  <img src="https://img.shields.io/badge/%F0%9F%8E%93_INTERACTIVE_TUTORIAL-START_HERE-brightgreen?style=for-the-badge&labelColor=black" alt="Interactive Tutorial">
+</a>
+
+**Learn how to use The Signet in minutes with our step-by-step interactive guide!**
+
+---
+
+</div>
 
 <h2>Feature Breakdown</h2>
 <table>
