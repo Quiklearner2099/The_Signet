@@ -1,25 +1,23 @@
 <div align="center">
 
-<h1>The Signet</h1>
-
 [![GitHub release](https://img.shields.io/github/v/release/Quiklearner2099/The_Signet)](https://github.com/Quiklearner2099/The_Signet/releases)
 [![Arduino](https://img.shields.io/badge/Platform-Arduino-00979D.svg)](https://www.arduino.cc/)
 [![ESP32-C6](https://img.shields.io/badge/MCU-ESP32--C6-red.svg)](https://www.espressif.com/)
 [![License: MIT](https://img.shields.io/badge/Software-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![License: CERN-OHL-P-2.0](https://img.shields.io/badge/Hardware-CERN--OHL--P%202.0-blue.svg)](https://ohwr.org/cern_ohl_p_v2.txt)
 
-<h2>BIG BROTHER IS WATCHING YOU…<br/>Send him a message.</h2>
+![The Signet banner](data/the_signet_banner_1600x400.png)
 
 [![Steganography](https://img.shields.io/badge/Steganography-Morse%20Code-purple.svg)]()
 [![Free Speech](https://img.shields.io/badge/Free%20Speech-Tool-1DA1F2.svg)]()
 
-<p>
-  <font color="#d73a49"><strong>The Signet</strong> — A Morse Beacon for Protest Messaging / Video Steganography
-</p>
+<h1>BIG BROTHER IS WATCHING YOU…<br/>Send him a message.</h1>
+
+<strong>A Morse Beacon for Protest Messaging / Video Steganography</strong>
 
 <p>
   <strong>The Signet</strong> is a small, WiFi configurable beacon designed to embed a message
-  (<strong>encoded in Morse code</strong>) into <strong>recorded video footage</strong>
+  (<strong>encoded in Morse code</strong>)<br>into <strong>recorded video footage</strong>
   using a blinking light source.
 </p>
 
