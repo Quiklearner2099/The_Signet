@@ -87,6 +87,22 @@
 
 <hr/>
 
+<h2>Build Guide</h2>
+
+<p>
+  Watch the complete 14-minute build tutorial to assemble your own Signet device:
+</p>
+
+<div align="center">
+  <a href="https://youtu.be/t5bWV8Do2Gw">
+    <img src="https://img.youtube.com/vi/t5bWV8Do2Gw/maxresdefault.jpg" alt="The Signet Build Tutorial" width="560">
+  </a>
+  <br>
+  <strong>▶️ Click to watch on YouTube</strong>
+</div>
+
+<hr/>
+
 <h2>Why this exists</h2>
 
 <h3>📣 Durable speech when platforms fail</h3>
