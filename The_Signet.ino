@@ -627,6 +627,7 @@ async function getState() {
     if (s.text && document.activeElement !== ui.msg) ui.msg.value = s.text;
     ui.status.textContent = s.playing ? 'Playing…' : 'Idle';
     if (s.version) ui.version.textContent = 'Firmware v' + s.version;
+    updateTxTime();
 
     const visMode = s.mode === 1;
     ui.colorCard.style.opacity = visMode ? 1 : 0.4;
@@ -657,12 +658,21 @@ ui.wheelCanvas.addEventListener('click', async (e)=>{
 });
 ui.dazzle.addEventListener('change', async ()=>{ await post('/api/update', { dazzle: ui.dazzle.checked }); });
 
+function updateTxTime(){
+  const wpm=parseInt(ui.wpm.value)||10;
+  const msg=ui.msg.value||'';
+  ui.txTime.textContent=msg.length>0?'\u23F1 '+calcTxTime(msg,wpm):'';
+}
+
 ui.wpm.addEventListener('input', ()=>{
   ui.wpmDisplay.textContent = ui.wpm.value;
+  updateTxTime();
 });
 ui.wpm.addEventListener('change', async ()=>{
   await post('/api/update', { wpm: parseInt(ui.wpm.value) });
 });
+
+ui.msg.addEventListener('input', updateTxTime);
 
 ui.play.addEventListener('click', async ()=>{ const wpm=parseInt(ui.wpm.value)||10; ui.txTime.textContent='\u23F1 '+calcTxTime(ui.msg.value||'',wpm); await post('/api/play', { text: ui.msg.value || '' }); ui.status.textContent = 'Playing…'; });
 ui.stop.addEventListener('click', async ()=>{ await post('/api/stop'); ui.status.textContent = 'Idle'; });
