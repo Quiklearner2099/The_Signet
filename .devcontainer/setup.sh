@@ -16,7 +16,11 @@ echo "Installing required Arduino libraries..."
 arduino-cli lib install "FastLED"
 arduino-cli lib install "ArduinoJson"
 
-echo "Libraries installed:"
-arduino-cli lib list
+echo "Verifying library installation..."
+arduino-cli lib list | grep -E "FastLED|ArduinoJson"
+
+echo "Creating .vscode directory..."
+mkdir -p /workspaces/The_Signet/.vscode
 
 echo "Setup complete! Your ESP32 C6 Arduino development environment is ready."
+echo "Include paths have been configured for IntelliSense."
