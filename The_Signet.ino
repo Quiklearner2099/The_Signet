@@ -41,6 +41,12 @@
   VERSION HISTORY:
   ===================================================================================
 
+  v1.1.2 (February 19, 2026) - Bugfix: TX time display now updates correctly when message
+                              speed (WPM) is modified (Issue #24). Custom message no longer
+                              reverts to default when selecting options before Play (Issue #25).
+                              Fixed race condition where blue pulse and playback could both
+                              control LED after quick power cycle (Issue #26). API now returns
+                              proper error responses for invalid requests (Issue #27).
   v1.1.1 (January 27, 2026) - UI improvements: larger help icon and 1984 footer text,
                               firmware version indicator, splash screen text and
                               improved load reliability, Harlow font title, yellow
@@ -77,8 +83,8 @@
 #include "driver/ledc.h"  // Hardware PWM for IR LED
 
 // -------------------- Version Information --------------------
-#define FIRMWARE_VERSION "1.1.1"
-#define FIRMWARE_DATE    "JANUARY 27 2026"
+#define FIRMWARE_VERSION "1.1.2"
+#define FIRMWARE_DATE    "February 19, 2026"
 
 // -------------------- Forward Declarations --------------------
 enum Mode     { DISCREET = 0, VISIBLE = 1 };
@@ -597,6 +603,7 @@ async function post(url, body) {
 }
 
 let wheelHue=0;
+let msgDirty=false;
 function hslToRgb(h,s,l){s/=100;l/=100;const k=n=>(n+h/30)%12;const a=s*Math.min(l,1-l);const f=n=>l-a*Math.max(-1,Math.min(k(n)-3,Math.min(9-k(n),1)));return{r:Math.round(f(0)*255),g:Math.round(f(8)*255),b:Math.round(f(4)*255)};}
 function drawWheel(){const c=ui.wheelCanvas,ctx=c.getContext('2d'),cx=c.width/2,cy=c.height/2,r=cx-2;for(let a=0;a<360;a++){ctx.beginPath();ctx.moveTo(cx,cy);ctx.arc(cx,cy,r,a*Math.PI/180,(a+2)*Math.PI/180);ctx.closePath();ctx.fillStyle='hsl('+a+',100%,50%)';ctx.fill();}}
 function pickFromWheel(e){const c=ui.wheelCanvas,rect=c.getBoundingClientRect(),x=e.clientX-rect.left-c.width/2,y=e.clientY-rect.top-c.height/2,d=Math.sqrt(x*x+y*y);if(d>c.width/2)return null;let a=Math.atan2(y,x)*180/Math.PI;if(a<0)a+=360;return Math.round(a);}
@@ -624,9 +631,10 @@ async function getState() {
     // Show/hide picker based on custom selection
     ui.pickerWrap.classList.toggle('visible', s.color === 'CUSTOM');
 
-    if (s.text && document.activeElement !== ui.msg) ui.msg.value = s.text;
+    if (s.text && !msgDirty) ui.msg.value = s.text;
     ui.status.textContent = s.playing ? 'Playing…' : 'Idle';
     if (s.version) ui.version.textContent = 'Firmware v' + s.version;
+    updateTxTime();
 
     const visMode = s.mode === 1;
     ui.colorCard.style.opacity = visMode ? 1 : 0.4;
@@ -657,14 +665,23 @@ ui.wheelCanvas.addEventListener('click', async (e)=>{
 });
 ui.dazzle.addEventListener('change', async ()=>{ await post('/api/update', { dazzle: ui.dazzle.checked }); });
 
+function updateTxTime(){
+  const wpm=parseInt(ui.wpm.value)||10;
+  const msg=ui.msg.value||'';
+  ui.txTime.textContent=msg.length>0?'\u23F1 '+calcTxTime(msg,wpm):'';
+}
+
 ui.wpm.addEventListener('input', ()=>{
   ui.wpmDisplay.textContent = ui.wpm.value;
+  updateTxTime();
 });
 ui.wpm.addEventListener('change', async ()=>{
   await post('/api/update', { wpm: parseInt(ui.wpm.value) });
 });
 
-ui.play.addEventListener('click', async ()=>{ const wpm=parseInt(ui.wpm.value)||10; ui.txTime.textContent='\u23F1 '+calcTxTime(ui.msg.value||'',wpm); await post('/api/play', { text: ui.msg.value || '' }); ui.status.textContent = 'Playing…'; });
+ui.msg.addEventListener('input', ()=>{ msgDirty=true; updateTxTime(); });
+
+ui.play.addEventListener('click', async ()=>{ const wpm=parseInt(ui.wpm.value)||10; ui.txTime.textContent='\u23F1 '+calcTxTime(ui.msg.value||'',wpm); await post('/api/play', { text: ui.msg.value || '' }); msgDirty=false; ui.status.textContent = 'Playing…'; });
 ui.stop.addEventListener('click', async ()=>{ await post('/api/stop'); ui.status.textContent = 'Idle'; });
 
 function setupSplash(){
@@ -892,28 +909,28 @@ void handleUpdate(){
   noteActivity();
   StaticJsonDocument<256> doc;
   auto err = deserializeJson(doc, server.arg("plain"));
-  if (!err) {
-    if (doc.containsKey("mode")) {
-      String m = doc["mode"].as<String>();
-      state.mode = (m == "VISIBLE") ? VISIBLE : DISCREET;
-      // FIX: When switching modes, turn off BOTH LEDs to prevent bleed-through
-      allOff();
-    }
-    if (doc.containsKey("intensity")) {
-      state.intensity = strToIntensity(doc["intensity"].as<String>());
-    }
-    if (doc.containsKey("color"))     state.color     = strToColor(doc["color"].as<String>());
-    if (doc.containsKey("customR"))   state.customR   = (uint8_t)doc["customR"].as<int>();
-    if (doc.containsKey("customG"))   state.customG   = (uint8_t)doc["customG"].as<int>();
-    if (doc.containsKey("customB"))   state.customB   = (uint8_t)doc["customB"].as<int>();
-    if (doc.containsKey("dazzle"))    state.dazzle    = doc["dazzle"].as<bool>();
-    if (doc.containsKey("wpm")) {
-      int newWpm = doc["wpm"].as<int>();
-      // Clamp to valid range (5-20)
-      if (newWpm < 5) newWpm = 5;
-      if (newWpm > 20) newWpm = 20;
-      state.wpm = (uint8_t)newWpm;
-    }
+  if (err) {
+    server.send(400, "application/json", "{\"error\":\"invalid JSON\"}");
+    return;
+  }
+  if (doc.containsKey("mode")) {
+    String m = doc["mode"].as<String>();
+    state.mode = (m == "VISIBLE") ? VISIBLE : DISCREET;
+    allOff();
+  }
+  if (doc.containsKey("intensity")) {
+    state.intensity = strToIntensity(doc["intensity"].as<String>());
+  }
+  if (doc.containsKey("color"))     state.color     = strToColor(doc["color"].as<String>());
+  if (doc.containsKey("customR"))   state.customR   = (uint8_t)doc["customR"].as<int>();
+  if (doc.containsKey("customG"))   state.customG   = (uint8_t)doc["customG"].as<int>();
+  if (doc.containsKey("customB"))   state.customB   = (uint8_t)doc["customB"].as<int>();
+  if (doc.containsKey("dazzle"))    state.dazzle    = doc["dazzle"].as<bool>();
+  if (doc.containsKey("wpm")) {
+    int newWpm = doc["wpm"].as<int>();
+    if (newWpm < 5) newWpm = 5;
+    if (newWpm > 20) newWpm = 20;
+    state.wpm = (uint8_t)newWpm;
   }
   server.send(200, "application/json", "{\"ok\":true}");
 }
@@ -922,18 +939,17 @@ void handlePlay(){
   noteActivity();
   StaticJsonDocument<256> doc;
   auto err = deserializeJson(doc, server.arg("plain"));
-  // FIX: Thread-safe text update with length validation
   if (!err && doc.containsKey("text")) {
     String newText = doc["text"].as<String>();
-    // Limit to 64 characters to prevent memory issues
     if (newText.length() > 200) newText = newText.substring(0, 200);
-    // Don't allow empty text - keep default if empty
     if (newText.length() > 0) {
       setTextSafe(newText);
+      state.playing = true;
+      server.send(200, "application/json", "{\"playing\":true}");
+      return;
     }
   }
-  state.playing = true;
-  server.send(200, "application/json", "{\"playing\":true}");
+  server.send(400, "application/json", "{\"error\":\"missing or empty text\"}");
 }
 
 void handleStop(){
@@ -1125,7 +1141,7 @@ void loop(){
     server.handleClient();
 
     // Pulse blue LED while waiting for Web UI connection
-    if (!uiServed) {
+    if (!uiServed && !state.playing) {
       updateBluePulse();
     }
 
