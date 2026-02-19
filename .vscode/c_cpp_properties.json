@@ -1,0 +1,26 @@
+{
+  "configurations": [
+    {
+      "name": "ESP32-C6",
+      "includePath": [
+        "${workspaceFolder}",
+        "/root/.arduino15/packages/esp32/hardware/esp32/*/cores/esp32",
+        "/root/.arduino15/packages/esp32/hardware/esp32/*/variants/esp32c6",
+        "/root/.arduino15/packages/esp32/hardware/esp32/*/libraries/**",
+        "/root/.arduino15/libraries/**",
+        "/root/.arduino15/packages/esp32/tools/xtensa-esp32c6-elf/**"
+      ],
+      "defines": [
+        "ESP32",
+        "ESP32_C6",
+        "ARDUINO=10816",
+        "ARDUINO_ESP32_DEV"
+      ],
+      "compilerPath": "/usr/bin/gcc",
+      "cStandard": "c17",
+      "cppStandard": "c++17",
+      "intelliSenseEngine": "tag-parser"
+    }
+  ],
+  "version": 4
+}
