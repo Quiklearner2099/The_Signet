@@ -1,0 +1,28 @@
+{
+  "name": "ESP32 C6 Arduino Development",
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu-22.04",
+  "features": {
+    "ghcr.io/devcontainers/features/git:1": {},
+    "ghcr.io/devcontainers/features/python:1": {
+      "version": "3.10"
+    }
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "vsciot-vscode.vscode-arduino",
+        "espressif.esp-idf-extension",
+        "ms-vscode.cpptools",
+        "ms-vscode.cpptools-extension-pack"
+      ],
+      "settings": {
+        "arduino.defaultBaudRate": 115200,
+        "arduino.path": "/opt/arduino-cli",
+        "arduino.commandPath": "arduino-cli",
+        "C_Cpp.default.compilerPath": "/opt/arduino-cli/tools/esp32-c6/bin/xtensa-esp32c6-elf-gcc"
+      }
+    }
+  },
+  "postCreateCommand": "bash .devcontainer/setup.sh",
+  "remoteUser": "root"
+}
