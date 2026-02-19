@@ -1,5 +1,6 @@
 {
-  "name": "ESP32 C6 Arduino Development",
+  "name": "The Signet ESP32 C6",
+  "displayName": "The Signet - ESP32 C6 Arduino",
   "image": "mcr.microsoft.com/devcontainers/base:ubuntu-22.04",
   "features": {
     "ghcr.io/devcontainers/features/git:1": {},
