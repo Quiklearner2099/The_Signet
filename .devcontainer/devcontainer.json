@@ -22,6 +22,17 @@
         "arduino.commandPath": "arduino-cli",
         "arduino.board": "esp32:esp32:esp32c6",
         "arduino.port": "/dev/ttyUSB0",
+        "C_Cpp.default.includePath": [
+          "/root/.arduino15/packages/esp32/hardware/esp32/*/cores/esp32",
+          "/root/.arduino15/packages/esp32/hardware/esp32/*/variants/esp32c6",
+          "/root/.arduino15/packages/esp32/hardware/esp32/*/libraries/**",
+          "/root/.arduino15/libraries/**",
+          "${workspaceFolder}"
+        ],
+        "C_Cpp.default.compilerPath": "/usr/bin/gcc",
+        "C_Cpp.default.cStandard": "c17",
+        "C_Cpp.default.cppStandard": "c++17",
+        "C_Cpp.default.intelliSenseEngine": "tag-parser",
         "[cpp]": {
           "editor.defaultFormatter": "ms-vscode.cpptools",
           "editor.formatOnSave": true
