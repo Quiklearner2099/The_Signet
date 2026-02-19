@@ -41,6 +41,9 @@
   VERSION HISTORY:
   ===================================================================================
 
+  v1.1.2 (February 19, 2026) - Bugfix: TX time display now updates correctly when message
+                              speed (WPM) is modified (Issue #24). Custom message no longer
+                              reverts to default when selecting options before Play (Issue #25)
   v1.1.1 (January 27, 2026) - UI improvements: larger help icon and 1984 footer text,
                               firmware version indicator, splash screen text and
                               improved load reliability, Harlow font title, yellow
@@ -77,8 +80,8 @@
 #include "driver/ledc.h"  // Hardware PWM for IR LED
 
 // -------------------- Version Information --------------------
-#define FIRMWARE_VERSION "1.1.1"
-#define FIRMWARE_DATE    "JANUARY 27 2026"
+#define FIRMWARE_VERSION "1.1.2"
+#define FIRMWARE_DATE    "February 19, 2026"
 
 // -------------------- Forward Declarations --------------------
 enum Mode     { DISCREET = 0, VISIBLE = 1 };
@@ -597,6 +600,7 @@ async function post(url, body) {
 }
 
 let wheelHue=0;
+let msgDirty=false;
 function hslToRgb(h,s,l){s/=100;l/=100;const k=n=>(n+h/30)%12;const a=s*Math.min(l,1-l);const f=n=>l-a*Math.max(-1,Math.min(k(n)-3,Math.min(9-k(n),1)));return{r:Math.round(f(0)*255),g:Math.round(f(8)*255),b:Math.round(f(4)*255)};}
 function drawWheel(){const c=ui.wheelCanvas,ctx=c.getContext('2d'),cx=c.width/2,cy=c.height/2,r=cx-2;for(let a=0;a<360;a++){ctx.beginPath();ctx.moveTo(cx,cy);ctx.arc(cx,cy,r,a*Math.PI/180,(a+2)*Math.PI/180);ctx.closePath();ctx.fillStyle='hsl('+a+',100%,50%)';ctx.fill();}}
 function pickFromWheel(e){const c=ui.wheelCanvas,rect=c.getBoundingClientRect(),x=e.clientX-rect.left-c.width/2,y=e.clientY-rect.top-c.height/2,d=Math.sqrt(x*x+y*y);if(d>c.width/2)return null;let a=Math.atan2(y,x)*180/Math.PI;if(a<0)a+=360;return Math.round(a);}
@@ -624,7 +628,7 @@ async function getState() {
     // Show/hide picker based on custom selection
     ui.pickerWrap.classList.toggle('visible', s.color === 'CUSTOM');
 
-    if (s.text && document.activeElement !== ui.msg) ui.msg.value = s.text;
+    if (s.text && !msgDirty) ui.msg.value = s.text;
     ui.status.textContent = s.playing ? 'Playing…' : 'Idle';
     if (s.version) ui.version.textContent = 'Firmware v' + s.version;
     updateTxTime();
@@ -672,9 +676,9 @@ ui.wpm.addEventListener('change', async ()=>{
   await post('/api/update', { wpm: parseInt(ui.wpm.value) });
 });
 
-ui.msg.addEventListener('input', updateTxTime);
+ui.msg.addEventListener('input', ()=>{ msgDirty=true; updateTxTime(); });
 
-ui.play.addEventListener('click', async ()=>{ const wpm=parseInt(ui.wpm.value)||10; ui.txTime.textContent='\u23F1 '+calcTxTime(ui.msg.value||'',wpm); await post('/api/play', { text: ui.msg.value || '' }); ui.status.textContent = 'Playing…'; });
+ui.play.addEventListener('click', async ()=>{ const wpm=parseInt(ui.wpm.value)||10; ui.txTime.textContent='\u23F1 '+calcTxTime(ui.msg.value||'',wpm); await post('/api/play', { text: ui.msg.value || '' }); msgDirty=false; ui.status.textContent = 'Playing…'; });
 ui.stop.addEventListener('click', async ()=>{ await post('/api/stop'); ui.status.textContent = 'Idle'; });
 
 function setupSplash(){
