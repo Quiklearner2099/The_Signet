@@ -45,7 +45,8 @@
                               speed (WPM) is modified (Issue #24). Custom message no longer
                               reverts to default when selecting options before Play (Issue #25).
                               Fixed race condition where blue pulse and playback could both
-                              control LED after quick power cycle (Issue #26).
+                              control LED after quick power cycle (Issue #26). API now returns
+                              proper error responses for invalid requests (Issue #27).
   v1.1.1 (January 27, 2026) - UI improvements: larger help icon and 1984 footer text,
                               firmware version indicator, splash screen text and
                               improved load reliability, Harlow font title, yellow
@@ -908,28 +909,28 @@ void handleUpdate(){
   noteActivity();
   StaticJsonDocument<256> doc;
   auto err = deserializeJson(doc, server.arg("plain"));
-  if (!err) {
-    if (doc.containsKey("mode")) {
-      String m = doc["mode"].as<String>();
-      state.mode = (m == "VISIBLE") ? VISIBLE : DISCREET;
-      // FIX: When switching modes, turn off BOTH LEDs to prevent bleed-through
-      allOff();
-    }
-    if (doc.containsKey("intensity")) {
-      state.intensity = strToIntensity(doc["intensity"].as<String>());
-    }
-    if (doc.containsKey("color"))     state.color     = strToColor(doc["color"].as<String>());
-    if (doc.containsKey("customR"))   state.customR   = (uint8_t)doc["customR"].as<int>();
-    if (doc.containsKey("customG"))   state.customG   = (uint8_t)doc["customG"].as<int>();
-    if (doc.containsKey("customB"))   state.customB   = (uint8_t)doc["customB"].as<int>();
-    if (doc.containsKey("dazzle"))    state.dazzle    = doc["dazzle"].as<bool>();
-    if (doc.containsKey("wpm")) {
-      int newWpm = doc["wpm"].as<int>();
-      // Clamp to valid range (5-20)
-      if (newWpm < 5) newWpm = 5;
-      if (newWpm > 20) newWpm = 20;
-      state.wpm = (uint8_t)newWpm;
-    }
+  if (err) {
+    server.send(400, "application/json", "{\"error\":\"invalid JSON\"}");
+    return;
+  }
+  if (doc.containsKey("mode")) {
+    String m = doc["mode"].as<String>();
+    state.mode = (m == "VISIBLE") ? VISIBLE : DISCREET;
+    allOff();
+  }
+  if (doc.containsKey("intensity")) {
+    state.intensity = strToIntensity(doc["intensity"].as<String>());
+  }
+  if (doc.containsKey("color"))     state.color     = strToColor(doc["color"].as<String>());
+  if (doc.containsKey("customR"))   state.customR   = (uint8_t)doc["customR"].as<int>();
+  if (doc.containsKey("customG"))   state.customG   = (uint8_t)doc["customG"].as<int>();
+  if (doc.containsKey("customB"))   state.customB   = (uint8_t)doc["customB"].as<int>();
+  if (doc.containsKey("dazzle"))    state.dazzle    = doc["dazzle"].as<bool>();
+  if (doc.containsKey("wpm")) {
+    int newWpm = doc["wpm"].as<int>();
+    if (newWpm < 5) newWpm = 5;
+    if (newWpm > 20) newWpm = 20;
+    state.wpm = (uint8_t)newWpm;
   }
   server.send(200, "application/json", "{\"ok\":true}");
 }
@@ -938,18 +939,17 @@ void handlePlay(){
   noteActivity();
   StaticJsonDocument<256> doc;
   auto err = deserializeJson(doc, server.arg("plain"));
-  // FIX: Thread-safe text update with length validation
   if (!err && doc.containsKey("text")) {
     String newText = doc["text"].as<String>();
-    // Limit to 64 characters to prevent memory issues
     if (newText.length() > 200) newText = newText.substring(0, 200);
-    // Don't allow empty text - keep default if empty
     if (newText.length() > 0) {
       setTextSafe(newText);
+      state.playing = true;
+      server.send(200, "application/json", "{\"playing\":true}");
+      return;
     }
   }
-  state.playing = true;
-  server.send(200, "application/json", "{\"playing\":true}");
+  server.send(400, "application/json", "{\"error\":\"missing or empty text\"}");
 }
 
 void handleStop(){
