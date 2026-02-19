@@ -43,7 +43,9 @@
 
   v1.1.2 (February 19, 2026) - Bugfix: TX time display now updates correctly when message
                               speed (WPM) is modified (Issue #24). Custom message no longer
-                              reverts to default when selecting options before Play (Issue #25)
+                              reverts to default when selecting options before Play (Issue #25).
+                              Fixed race condition where blue pulse and playback could both
+                              control LED after quick power cycle (Issue #26).
   v1.1.1 (January 27, 2026) - UI improvements: larger help icon and 1984 footer text,
                               firmware version indicator, splash screen text and
                               improved load reliability, Harlow font title, yellow
@@ -1139,7 +1141,7 @@ void loop(){
     server.handleClient();
 
     // Pulse blue LED while waiting for Web UI connection
-    if (!uiServed) {
+    if (!uiServed && !state.playing) {
       updateBluePulse();
     }
 
