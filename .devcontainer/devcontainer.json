@@ -13,13 +13,19 @@
         "vsciot-vscode.vscode-arduino",
         "espressif.esp-idf-extension",
         "ms-vscode.cpptools",
-        "ms-vscode.cpptools-extension-pack"
+        "ms-vscode.cpptools-extension-pack",
+        "ms-vscode.cmake-tools"
       ],
       "settings": {
         "arduino.defaultBaudRate": 115200,
         "arduino.path": "/opt/arduino-cli",
         "arduino.commandPath": "arduino-cli",
-        "C_Cpp.default.compilerPath": "/opt/arduino-cli/tools/esp32-c6/bin/xtensa-esp32c6-elf-gcc"
+        "arduino.board": "esp32:esp32:esp32c6",
+        "arduino.port": "/dev/ttyUSB0",
+        "[cpp]": {
+          "editor.defaultFormatter": "ms-vscode.cpptools",
+          "editor.formatOnSave": true
+        }
       }
     }
   },
