@@ -10,9 +10,13 @@ mkdir -p ~/.config/arduino15
 arduino-cli config init
 
 echo "Adding ESP32 board package..."
-arduino-cli core install esp32:esp32
+arduino-cli core install esp32:esp32@3.0.0
 
-echo "Installing ESP32 C6 board..."
-arduino-cli board search "ESP32 C6" 
+echo "Installing required Arduino libraries..."
+arduino-cli lib install "FastLED"
+arduino-cli lib install "ArduinoJson"
 
-echo "Setup complete! Your ESP32 development environment is ready."
+echo "Libraries installed:"
+arduino-cli lib list
+
+echo "Setup complete! Your ESP32 C6 Arduino development environment is ready."
