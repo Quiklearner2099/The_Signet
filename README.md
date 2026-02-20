@@ -13,7 +13,7 @@
 
 <h1>BIG BROTHER IS WATCHING YOU…<br/>Send him a message.</h1>
 
-<strong>A Morse Beacon for Protest Messaging / Video Steganography</strong>
+<strong>A Morse Code Beacon for Protest Messaging / Video Steganography</strong>
 
 <p>
   <strong>The Signet</strong> is a small, WiFi configurable beacon designed to embed a message
