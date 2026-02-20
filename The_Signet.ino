@@ -19,7 +19,7 @@
   - Adjustable Morse speed (5-20 WPM)
   - 90-second idle WiFi AP timeout to conserve power
   - Help(?) screen with Morse code definitions
-  - OTA Firmware update support v1.2.0 and up
+  - OTA Firmware update support (v1.2.0 and up), with fallback protection
 
   HARDWARE:
   - Seeed Studios XIAO ESP32-C6 Module (other ESP32s can be used)
@@ -92,7 +92,7 @@
 
 // -------------------- Version Information --------------------
 #define FIRMWARE_VERSION "1.2.0"
-#define FIRMWARE_DATE    "February 19, 2026"
+#define FIRMWARE_DATE    "February 20, 2026"
 
 // -------------------- Forward Declarations --------------------
 enum Mode     { DISCREET = 0, VISIBLE = 1 };
