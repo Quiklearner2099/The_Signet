@@ -15,6 +15,8 @@
 
 <strong>A Morse Beacon for Protest Messaging / Video Steganography</strong>
 
+![Visitor Badge](https://visitor-badge.laobi.icu/badge?page_id=username.repo)
+
 <p>
   <strong>The Signet</strong> is a small, WiFi configurable beacon designed to embed a message
   (<strong>encoded in Morse code</strong>)<br>into <strong>recorded video footage</strong>
