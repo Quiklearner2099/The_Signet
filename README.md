@@ -40,36 +40,20 @@
 
 </div>
 
-<h2>Feature Breakdown</h2>
-<table>
-<tr>
-<th align="left" width="46%">Hardware</th>
-<th align="left" width="54%">Firmware</th>
-</tr>
-<tr>
-<td valign="top">
-&bull; <strong>XIAO ESP32-C6 SoC</strong> - cheap, small, capable<br/>
-&bull; <strong>Dual emitters</strong> - RGB LED + 850nm IR LED<br/>
-&bull; <strong>500 mAh Li-Po</strong> with dis/charge protection<br/>
-&bull; <strong>USB-C charging</strong> - can be used while charging<br/>
-&bull; <strong>Magnetic mounting</strong> - for fast, easy placement<br/><br>
-&bull; <strong>Designed for easy assembly and quick builds</strong><br/>
-&bull; <strong>Snap-fit 3D-printable enclosure (2 pieces)</strong><br/>
-&bull; <strong>Minimal soldering required</strong>
+## Feature Breakdown
 
-</td>
-<td valign="top">
-&bull; <strong>Plain text &#8594; International Morse code signaling<br/>
-&bull; <strong>Language agnostic</strong> - enc/decodes the same worldwide<br/>
-&bull; <strong>Visible / Discreet modes</strong> - selectable RGB / IR output<br/>
-&bull; <strong>WiFi AP+CP</strong> - browser-based UI; no app required<br/>
-&bull; <strong>No internet connectivity</strong> - operates fully offline<br/>
-&bull; <strong>Auto WiFi shutdown after 90 seconds of UI inactivity</strong><br/>
-&bull; <strong>"Stateless by Power" design</strong>; no messages stored<br/>
-&bull; <strong>NO telemetry, NO accounts, NO bullshyte<strong>
-</td>
-</tr>
-</table>
+| 🔩 Hardware | 💾 Firmware |
+|:---|:---|
+| **XIAO ESP32-C6 SoC** — cheap, small, capable | **Plain text → International Morse code** signaling |
+| **Dual emitters** — RGB LED + 850nm IR LED | **Language agnostic** — enc/decodes the same worldwide |
+| **500 mAh Li-Po** with dis/charge protection | **Visible / Discreet modes** — selectable RGB / IR output |
+| **USB-C charging** — can be used while charging | **WiFi AP+CP** — browser-based UI; no app required |
+| **Magnetic mounting** — for fast, easy placement | **No internet connectivity** — operates fully offline |
+| **Easy assembly and quick builds** | **Auto WiFi shutdown** after 90 seconds of UI inactivity |
+| **Snap-fit 3D-printable enclosure** (2 pieces) | **OTA firmware updates** — upload new firmware via the captive portal |
+| **Minimal soldering required** | **"Stateless by Power" design** — no messages stored |
+ 
+**NO telemetry, NO accounts, NO bullshyte**
 
 <hr/>
 
@@ -193,6 +177,7 @@
   <li><strong>Automatic AP shutdown</strong> after 90 seconds of inactivity</li>
   <li><strong>No persistent logs or telemetry</strong></li>
   <li><strong>Stateless by power design</strong> — power cycling resets to default</li>
+  <li><strong>OTA updates are local-only</strong> — firmware uploaded directly through the on-device Wi-Fi AP; no cloud, no remote access</li>
 </ul>
 
 <hr/>
