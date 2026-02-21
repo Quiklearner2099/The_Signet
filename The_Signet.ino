@@ -1,8 +1,8 @@
 /*
   ===================================================================================
   The Signet Morse Beacon
-  Version: 1.1.2
-  Release Date: February 19, 2026
+  Version: 1.2.0
+  Release Date: February 20, 2026
   ===================================================================================
 
   DESCRIPTION:
@@ -18,6 +18,8 @@
   - Morse Code Playback with configurable intensity
   - Adjustable Morse speed (5-20 WPM)
   - 90-second idle WiFi AP timeout to conserve power
+  - Help(?) screen with Morse code definitions
+  - OTA Firmware update support (v1.2.0 and up), with fallback protection
 
   HARDWARE:
   - Seeed Studios XIAO ESP32-C6 Module (other ESP32s can be used)
@@ -41,6 +43,10 @@
   VERSION HISTORY:
   ===================================================================================
 
+  v1.2.0 (February 20, 2026) - OTA firmware updates via web UI. Settings gear icon added
+                              to footer, opens firmware upload modal with password
+                              protection. Dual-partition layout enables automatic rollback
+                              on failed updates. Requires one-time USB flash from v1.1.x.
   v1.1.2 (February 19, 2026) - Bugfix: TX time display now updates correctly when message
                               speed (WPM) is modified (Issue #24). Custom message no longer
                               reverts to default when selecting options before Play (Issue #25).
@@ -81,10 +87,12 @@
 #include "esp_sleep.h"
 #include "esp_mac.h"   // esp_read_mac()
 #include "driver/ledc.h"  // Hardware PWM for IR LED
+#include <Update.h>       // OTA firmware updates
+#include "esp_ota_ops.h"  // OTA boot validation
 
 // -------------------- Version Information --------------------
-#define FIRMWARE_VERSION "1.1.2"
-#define FIRMWARE_DATE    "February 19, 2026"
+#define FIRMWARE_VERSION "1.2.0"
+#define FIRMWARE_DATE    "February 20, 2026"
 
 // -------------------- Forward Declarations --------------------
 enum Mode     { DISCREET = 0, VISIBLE = 1 };
@@ -108,6 +116,8 @@ void handleState();
 void handleUpdate();
 void handlePlay();
 void handleStop();
+void handleOtaUpload();
+void handleOtaComplete();
 void handleNotFound();
 
 bool  captivePortal();
@@ -486,13 +496,27 @@ input:checked + .slider:before{transform:translateX(20px);background:#111}
 .btn-row .play{background:var(--primary);color:#000}
 .btn-row .stop{background:transparent;color:#fff;border:1px solid #333}
 .status{text-align:center;font-size:11px;color:#666;margin-top:6px}
-.footer{text-align:center;font-size:14px;color:#FFD700;font-weight:700;margin-top:10px}
+.footer{display:flex;align-items:center;justify-content:center;font-size:14px;color:#FFD700;font-weight:700;margin-top:10px}
+.footer-text{margin:0 8px}
+.settings-btn{width:28px;height:28px;border-radius:50%;background:#333;color:#ccc;border:none;font-size:16px;line-height:28px;text-align:center;cursor:pointer}
 .version{text-align:center;font-size:11px;color:#666;margin-top:6px}
 .help-btn{display:inline-block;width:28px;height:28px;border-radius:50%;background:#333;color:#ccc;text-decoration:none;font-size:16px;line-height:28px;text-align:center;margin-right:8px;vertical-align:middle}
 #splash{position:fixed;inset:0;background:rgba(0,0,0,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;opacity:0;pointer-events:none;transition:opacity .3s}
 #splash p{color:#888;font-size:14px;margin-top:16px;font-style:italic}
 #splash.visible{opacity:1;pointer-events:auto}
 #splash img{max-width:90vw;max-height:90vh;border-radius:12px;box-shadow:0 0 40px rgba(0,0,0,.7)}
+.ota-modal{position:fixed;inset:0;background:rgba(0,0,0,.9);display:flex;align-items:center;justify-content:center;z-index:9998;opacity:0;pointer-events:none;transition:opacity .2s}
+.ota-modal.visible{opacity:1;pointer-events:auto}
+.ota-card{background:var(--card);border-radius:16px;padding:20px;width:90%;max-width:320px}
+.ota-card h3{color:#fff;margin:0 0 12px;font-size:16px;text-align:center}
+.ota-close{position:absolute;top:12px;right:16px;background:none;border:none;color:#888;font-size:24px;cursor:pointer}
+.ota-input{width:100%;padding:14px;margin-bottom:14px;border-radius:8px;border:1px solid #333;background:#222;color:#fff;font-size:16px;box-sizing:border-box}
+.ota-input[type="file"]{padding:12px;height:auto;cursor:pointer}
+.ota-btn{width:100%;padding:14px;border-radius:8px;border:none;background:var(--primary);color:#000;font-weight:600;font-size:16px;cursor:pointer}
+.ota-btn:disabled{background:#555;color:#888;cursor:not-allowed}
+.ota-progress{width:100%;height:6px;border-radius:3px;margin:12px 0;display:none}
+.ota-status{text-align:center;font-size:12px;color:#888;margin-top:8px}
+.ota-version{text-align:center;font-size:11px;color:#666;margin-bottom:12px}
 </style>
 </head>
 <body>
@@ -566,8 +590,34 @@ input:checked + .slider:before{transform:translateX(20px);background:#111}
   </div>
 
 </div>
-<div class="footer"><a href="/help" class="help-btn">?</a>1984 was not an instruction manual</div>
+<div class="footer"><a href="/help" class="help-btn">?</a><span class="footer-text">1984 was not an instruction manual</span><button class="settings-btn" id="settingsBtn">&#9881;</button></div>
 <div class="version" id="version"></div>
+</div>
+
+<!-- OTA Modal -->
+<div class="ota-modal" id="otaModal">
+  <div class="ota-card">
+    <h3>Firmware Update</h3>
+    <div class="ota-version">Current: v<span id="otaVersion">-</span></div>
+    <input type="file" id="otaFile" accept=".bin" style="position:absolute;opacity:0;width:1px;height:1px">
+    <label for="otaFile" class="ota-btn" style="display:block;text-align:center;background:#333;color:#fff;margin-bottom:14px;cursor:pointer">Choose .bin File</label>
+    <div id="otaFileName" style="text-align:center;font-size:12px;color:#888;margin-bottom:14px">No file selected</div>
+    <button class="ota-btn" id="otaUpload">Upload Firmware</button>
+    <progress class="ota-progress" id="otaProgress" value="0" max="100"></progress>
+    <div class="ota-status" id="otaStatus"></div>
+    <button class="ota-btn" id="otaClose" style="margin-top:12px;background:#333;color:#fff">Close</button>
+  </div>
+</div>
+
+<!-- Android Browser Dialog -->
+<div class="ota-modal" id="androidDialog">
+  <div class="ota-card">
+    <h3>Open in Browser</h3>
+    <p style="font-size:13px;color:#ccc;text-align:center;margin-bottom:16px">Android requires a full browser for firmware updates. Copy the link and open it in Chrome.</p>
+    <button class="ota-btn" id="copyLinkBtn">Copy Link</button>
+    <div id="copyStatus" style="text-align:center;font-size:12px;color:#888;margin-top:8px"></div>
+    <button class="ota-btn" id="androidClose" style="margin-top:12px;background:#333;color:#fff">Close</button>
+  </div>
 </div>
 
 <script>
@@ -728,6 +778,141 @@ function setupSplash(){
 setupSplash();
 getState();
 setInterval(getState, 2000);
+
+// OTA Firmware Update
+const isAndroidCaptive = /android/i.test(navigator.userAgent) && /captiveportal|captive_portal|minibroswer|wv\)/i.test(navigator.userAgent);
+const otaModal = document.getElementById('otaModal');
+const androidDialog = document.getElementById('androidDialog');
+const otaVersion = document.getElementById('otaVersion');
+const otaFile = document.getElementById('otaFile');
+const otaFileName = document.getElementById('otaFileName');
+const otaUpload = document.getElementById('otaUpload');
+const otaProgress = document.getElementById('otaProgress');
+const otaStatus = document.getElementById('otaStatus');
+const otaClose = document.getElementById('otaClose');
+
+document.getElementById('settingsBtn').addEventListener('click', () => {
+  if (isAndroidCaptive) {
+    androidDialog.classList.add('visible');
+    document.getElementById('copyStatus').textContent = '';
+  } else {
+    otaModal.classList.add('visible');
+    otaVersion.textContent = ui.version.textContent.replace('Firmware v', '') || '-';
+    otaStatus.textContent = '';
+    otaProgress.style.display = 'none';
+    otaProgress.value = 0;
+    otaFileName.textContent = 'No file selected';
+    otaFileName.style.color = '#888';
+  }
+});
+
+otaClose.addEventListener('click', () => {
+  otaModal.classList.remove('visible');
+});
+
+// Android dialog handlers
+document.getElementById('androidClose').addEventListener('click', () => {
+  androidDialog.classList.remove('visible');
+});
+
+document.getElementById('copyLinkBtn').addEventListener('click', () => {
+  const url = 'http://192.168.4.1';
+  const status = document.getElementById('copyStatus');
+
+  // Use textarea + execCommand for better compatibility
+  const textarea = document.createElement('textarea');
+  textarea.value = url;
+  textarea.style.position = 'fixed';
+  textarea.style.opacity = '0';
+  document.body.appendChild(textarea);
+  textarea.select();
+
+  try {
+    document.execCommand('copy');
+    status.textContent = 'Copied! Open Chrome and paste.';
+    status.style.color = '#4CAF50';
+  } catch (e) {
+    status.textContent = 'Copy failed. Type: 192.168.4.1';
+    status.style.color = '#ff9800';
+  }
+
+  document.body.removeChild(textarea);
+});
+
+otaModal.addEventListener('click', (e) => {
+  if (e.target === otaModal) otaModal.classList.remove('visible');
+});
+
+otaFile.addEventListener('change', () => {
+  if (otaFile.files.length > 0) {
+    const name = otaFile.files[0].name;
+    if (!name.toLowerCase().endsWith('.bin')) {
+      otaFileName.textContent = 'Error: Select a .bin file';
+      otaFileName.style.color = '#f44336';
+      otaFile.value = '';
+      return;
+    }
+    otaFileName.textContent = name;
+    otaFileName.style.color = '#8AB4F8';
+  } else {
+    otaFileName.textContent = 'No file selected';
+    otaFileName.style.color = '#888';
+  }
+});
+
+otaUpload.addEventListener('click', async () => {
+  const file = otaFile.files[0];
+
+  if (!file) {
+    otaStatus.textContent = 'Select a .bin file';
+    otaStatus.style.color = '#ff9800';
+    return;
+  }
+
+  otaUpload.disabled = true;
+  otaStatus.textContent = 'Uploading...';
+  otaStatus.style.color = '#8AB4F8';
+  otaProgress.style.display = 'block';
+  otaProgress.value = 0;
+
+  const formData = new FormData();
+  formData.append('firmware', file);
+
+  const xhr = new XMLHttpRequest();
+  xhr.upload.addEventListener('progress', (e) => {
+    if (e.lengthComputable) {
+      otaProgress.value = (e.loaded / e.total) * 100;
+      otaStatus.textContent = Math.round(otaProgress.value) + '%';
+    }
+  });
+
+  xhr.addEventListener('load', () => {
+    if (xhr.status === 200) {
+      otaStatus.textContent = 'Success! Rebooting...';
+      otaStatus.style.color = '#4CAF50';
+      setTimeout(() => location.reload(), 5000);
+    } else {
+      // Parse error message from response if available
+      let msg = 'Update failed';
+      try {
+        const resp = JSON.parse(xhr.responseText);
+        if (resp.error) msg = resp.error;
+      } catch(e) {}
+      otaStatus.textContent = msg;
+      otaStatus.style.color = '#f44336';
+      otaUpload.disabled = false;
+    }
+  });
+
+  xhr.addEventListener('error', () => {
+    otaStatus.textContent = 'Network error';
+    otaStatus.style.color = '#f44336';
+    otaUpload.disabled = false;
+  });
+
+  xhr.open('POST', '/api/ota');
+  xhr.send(formData);
+});
 </script>
 </body></html>
 )====";
@@ -959,6 +1144,135 @@ void handleStop(){
   server.send(200, "application/json", "{\"playing\":false}");
 }
 
+// -------------------- OTA Firmware Update --------------------
+// OTA State Management
+static SemaphoreHandle_t otaMutex = nullptr;
+static bool otaInProgress = false;
+static bool otaHadError = false;
+static String otaErrorMessage = "";
+
+// Max firmware size (from partition table: 0x140000 = 1,310,720 bytes)
+const size_t OTA_MAX_SIZE = 0x140000;
+
+void handleOtaUpload() {
+  HTTPUpload& upload = server.upload();
+
+  // Keep AP alive during upload (prevents timeout during slow uploads)
+  noteActivity();
+
+  if (upload.status == UPLOAD_FILE_START) {
+    // Try to acquire mutex for exclusive OTA access (prevents concurrent uploads)
+    if (!otaMutex || xSemaphoreTake(otaMutex, pdMS_TO_TICKS(100)) != pdTRUE) {
+      otaHadError = true;
+      otaErrorMessage = "Update already in progress";
+      Serial.println("[OTA] Rejected: another update in progress");
+      return;
+    }
+
+    // Reset error state for new upload
+    otaHadError = false;
+    otaErrorMessage = "";
+
+    // Firmware size pre-check
+    size_t contentLength = 0;
+    if (server.hasHeader("Content-Length")) {
+      contentLength = server.header("Content-Length").toInt();
+    }
+    if (contentLength > OTA_MAX_SIZE) {
+      otaHadError = true;
+      otaErrorMessage = "Firmware too large (max 1.25MB)";
+      Serial.printf("[OTA] Rejected: size %u exceeds max %u\n", contentLength, OTA_MAX_SIZE);
+      xSemaphoreGive(otaMutex);
+      return;
+    }
+
+    Serial.printf("[OTA] Starting: %s (%u bytes)\n", upload.filename.c_str(), contentLength);
+
+    // Begin update with known size for better error detection
+    if (!Update.begin(contentLength > 0 ? contentLength : UPDATE_SIZE_UNKNOWN, U_FLASH)) {
+      otaHadError = true;
+      otaErrorMessage = "Update.begin() failed";
+      Update.printError(Serial);
+      xSemaphoreGive(otaMutex);
+      return;
+    }
+
+    otaInProgress = true;
+  }
+  else if (upload.status == UPLOAD_FILE_WRITE) {
+    // Only process if we have an active update
+    if (!otaInProgress) return;
+
+    if (Update.write(upload.buf, upload.currentSize) != upload.currentSize) {
+      otaHadError = true;
+      otaErrorMessage = "Write error during upload";
+      Update.printError(Serial);
+      Update.abort();
+      otaInProgress = false;
+      if (otaMutex) xSemaphoreGive(otaMutex);
+    }
+  }
+  else if (upload.status == UPLOAD_FILE_END) {
+    if (!otaInProgress) {
+      // Upload ended but we never started properly
+      if (otaMutex) xSemaphoreGive(otaMutex);
+      return;
+    }
+
+    if (Update.end(true)) {
+      Serial.printf("[OTA] Success: %u bytes written\n", upload.totalSize);
+    } else {
+      otaHadError = true;
+      otaErrorMessage = "Update finalization failed";
+      Update.printError(Serial);
+    }
+
+    otaInProgress = false;
+    if (otaMutex) xSemaphoreGive(otaMutex);
+  }
+  else if (upload.status == UPLOAD_FILE_ABORTED) {
+    Serial.println("[OTA] Upload aborted by client");
+    if (otaInProgress) {
+      Update.abort();
+      otaInProgress = false;
+    }
+    otaHadError = true;
+    otaErrorMessage = "Upload aborted";
+    if (otaMutex) xSemaphoreGive(otaMutex);
+  }
+}
+
+void handleOtaComplete() {
+  noteActivity();
+
+  // Check for errors during upload
+  if (otaHadError || Update.hasError()) {
+    String response = "{\"error\":\"";
+    if (otaErrorMessage.length() > 0) {
+      response += otaErrorMessage;
+    } else {
+      response += "Update failed";
+    }
+    response += "\"}";
+
+    // Clear error state
+    otaHadError = false;
+    otaErrorMessage = "";
+
+    server.send(400, "application/json", response);
+    return;
+  }
+
+  // Success!
+  server.send(200, "application/json", "{\"success\":true,\"message\":\"Rebooting...\"}");
+
+  // Allow response to be sent before reboot
+  delay(1000);
+  state.playing = false;
+  allOff();
+  ESP.restart();
+}
+
 void handleNotFound(){
   if (captivePortal()) return;
   noteActivity();
@@ -1070,6 +1384,12 @@ void setup(){
     Serial.println("WARNING: Failed to create text mutex");
   }
 
+  // Create mutex for OTA upload synchronization
+  otaMutex = xSemaphoreCreateMutex();
+  if (!otaMutex) {
+    Serial.println("WARNING: Failed to create OTA mutex");
+  }
+
 
   // Wi-Fi AP + captive DNS
   WiFi.mode(WIFI_AP);
@@ -1097,6 +1417,7 @@ void setup(){
   server.on("/api/update", HTTP_POST, handleUpdate);
   server.on("/api/play",   HTTP_POST, handlePlay);
   server.on("/api/stop",   HTTP_POST, handleStop);
+  server.on("/api/ota",    HTTP_POST, handleOtaComplete, handleOtaUpload);
 
   // Serve splash image from LittleFS as /bb.jpg
   server.on("/bb.jpg", HTTP_GET, [](){
@@ -1125,6 +1446,9 @@ void setup(){
 
   // Morse task
   xTaskCreate(morseTask, "morse", 4096, nullptr, 1, &morseTaskHandle);
+
+  // Mark firmware as valid (for OTA rollback protection)
+  esp_ota_mark_app_valid_cancel_rollback();
 }
 
 void loop(){

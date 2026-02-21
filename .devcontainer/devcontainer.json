@@ -1,0 +1,46 @@
+{
+  "name": "The Signet ESP32 C6",
+  "displayName": "The Signet - ESP32 C6 Arduino",
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu-22.04",
+  "features": {
+    "ghcr.io/devcontainers/features/git:1": {},
+    "ghcr.io/devcontainers/features/python:1": {
+      "version": "3.10"
+    }
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "vsciot-vscode.vscode-arduino",
+        "espressif.esp-idf-extension",
+        "ms-vscode.cpptools",
+        "ms-vscode.cpptools-extension-pack",
+        "ms-vscode.cmake-tools"
+      ],
+      "settings": {
+        "arduino.defaultBaudRate": 115200,
+        "arduino.path": "/opt/arduino-cli",
+        "arduino.commandPath": "arduino-cli",
+        "arduino.board": "esp32:esp32:esp32c6",
+        "arduino.port": "/dev/ttyUSB0",
+        "C_Cpp.default.includePath": [
+          "/root/.arduino15/packages/esp32/hardware/esp32/*/cores/esp32",
+          "/root/.arduino15/packages/esp32/hardware/esp32/*/variants/esp32c6",
+          "/root/.arduino15/packages/esp32/hardware/esp32/*/libraries/**",
+          "/root/.arduino15/libraries/**",
+          "${workspaceFolder}"
+        ],
+        "C_Cpp.default.compilerPath": "/usr/bin/gcc",
+        "C_Cpp.default.cStandard": "c17",
+        "C_Cpp.default.cppStandard": "c++17",
+        "C_Cpp.default.intelliSenseEngine": "tag-parser",
+        "[cpp]": {
+          "editor.defaultFormatter": "ms-vscode.cpptools",
+          "editor.formatOnSave": true
+        }
+      }
+    }
+  },
+  "postCreateCommand": "bash .devcontainer/setup.sh",
+  "remoteUser": "root"
+}

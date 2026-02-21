@@ -14,7 +14,7 @@
 
 <h1>BIG BROTHER IS WATCHING YOU…<br/>Send him a message.</h1>
 
-<strong>A Morse Beacon for Protest Messaging / Video Steganography</strong>
+<strong>A Morse Code Beacon for Protest Messaging / Video Steganography</strong>
 
 <p>
   <strong>The Signet</strong> is a small, WiFi configurable beacon designed to embed a message
@@ -196,6 +196,37 @@
 </ul>
 
 <hr/>
+
+## Development Setup
+
+### Quick Start with GitHub Codespaces
+
+The easiest way to contribute is to use GitHub Codespaces - a cloud-based development environment with everything pre-configured:
+
+1. Click the green **"Code"** button on the repository
+2. Select the **"Codespaces"** tab
+3. Click **"Create codespace on main"**
+4. Wait for **"The Signet - ESP32 C6 Arduino"** environment to build (~2-3 minutes)
+5. Once ready, you'll have a full VS Code environment with:
+   - Arduino CLI pre-installed
+   - ESP32 C6 board package configured
+   - All required libraries (FastLED, ArduinoJson, etc.)
+   - C++ IntelliSense properly configured
+   - Ready to compile and verify code
+
+**No local setup required!** All dependencies are handled automatically.
+
+### Local Development (Alternative)
+
+If you prefer to work locally:
+
+1. Install [Arduino IDE 2.x](https://www.arduino.cc/en/software) or [PlatformIO](https://platformio.org/)
+2. Install the ESP32 board package (version 3.0.0 or later)
+3. Install required libraries via the Library Manager:
+   - **FastLED** (v3.5.x)
+   - **ArduinoJson** (v6.x)
+4. Select board: **ESP32C6 Dev Module**
+5. Open `The_Signet.ino` and compile
 
 <h2>Ethical Use</h2>
 
