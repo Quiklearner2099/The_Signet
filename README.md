@@ -45,7 +45,7 @@
 | 🔩 Hardware | 💾 Firmware |
 |:---|:---|
 | **XIAO ESP32-C6 SoC** — cheap, small, capable | **Plain text → International Morse code** signaling |
-| **Dual emitters** — RGB LED + 850nm IR LED | **Language agnostic** — enc/decodes the same worldwide |
+| **Dual emitters** — RGB LED + 950nm IR LED | **Language agnostic** — enc/decodes the same worldwide |
 | **500 mAh Li-Po** with dis/charge protection | **Visible / Discreet modes** — selectable RGB / IR output |
 | **USB-C charging** — can be used while charging | **WiFi AP+CP** — browser-based UI; no app required |
 | **Magnetic mounting** — for fast, easy placement | **No internet connectivity** — operates fully offline |
