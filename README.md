@@ -184,7 +184,7 @@
 
 ## Development Setup
 
-### Quick Start with GitHub Codespaces
+### Quick Start with GitHub Codespaces ⭐ RECOMMENDED
 
 The easiest way to contribute is to use GitHub Codespaces - a cloud-based development environment with everything pre-configured:
 
