@@ -1,8 +1,8 @@
 /*
   ===================================================================================
   The Signet Morse Beacon
-  Version: 1.2.0
-  Release Date: February 20, 2026
+  Version: 1.2.1
+  Release Date: February 26, 2026
   ===================================================================================
 
   DESCRIPTION:
@@ -31,7 +31,7 @@
   - 100k Ohm resistor
   - 2N3904 NPN Transistor
   - SPST switch for sleep control
-  - 503035 LiPo battery with built in charge/discharge protection (optional)
+  - (optional) 503035 LiPo battery with built in charge/discharge protection 
 
   - See schematic for complete circuit
 
@@ -42,7 +42,9 @@
   ===================================================================================
   VERSION HISTORY:
   ===================================================================================
-
+  v1.2.1 (February 26, 2026) - Added UI language options for UI. English (default), French,
+                              Spanish, Russian, Traditional Chinese, Simplified Chinese, Arabic and Farsi.
+                              *** ITU Morse code is still implemented ***
   v1.2.0 (February 20, 2026) - OTA firmware updates via web UI. Settings gear icon added
                               to footer, opens firmware upload modal with password
                               protection. Dual-partition layout enables automatic rollback
@@ -89,15 +91,32 @@
 #include "driver/ledc.h"  // Hardware PWM for IR LED
 #include <Update.h>       // OTA firmware updates
 #include "esp_ota_ops.h"  // OTA boot validation
+#include <Preferences.h>  // Persistent language storage (NVS)
 
 // -------------------- Version Information --------------------
-#define FIRMWARE_VERSION "1.2.0"
-#define FIRMWARE_DATE    "February 20, 2026"
+#define FIRMWARE_VERSION "1.2.1"
+#define FIRMWARE_DATE    "February 26, 2026"
 
 // -------------------- Forward Declarations --------------------
 enum Mode     { DISCREET = 0, VISIBLE = 1 };
 enum ColorSel { C_RED = 0, C_GREEN = 1, C_BLUE = 2, C_CUSTOM = 3 };
 enum Intensity{ I_LOW = 0, I_MED = 1, I_HIGH = 2 };
+
+// Language codes for UI localization
+enum Language : uint8_t {
+  LANG_EN = 0,     // English (default)
+  LANG_ES = 1,     // Spanish (Español)
+  LANG_FR = 2,     // French (Français)
+  LANG_RU = 3,     // Russian (Русский)
+  LANG_ZH_CN = 4,  // Simplified Chinese (简体中文)
+  LANG_ZH_TW = 5,  // Traditional Chinese (繁體中文)
+  LANG_FA = 6,     // Farsi/Persian (فارسی)
+  LANG_AR = 7      // Arabic (العربية)
+};
+
+// Language code strings for API
+const char* const LANG_CODES[] = {"en", "es", "fr", "ru", "zh-CN", "zh-TW", "fa", "ar"};
+const uint8_t LANG_COUNT = 8;
 
 uint8_t  rgbBrightnessFor(Intensity i);
 uint8_t  irDutyFor(Intensity i);
@@ -118,6 +137,7 @@ void handlePlay();
 void handleStop();
 void handleOtaUpload();
 void handleOtaComplete();
+void handleLanguageSet();
 void handleNotFound();
 
 bool  captivePortal();
@@ -183,6 +203,10 @@ const unsigned long PULSE_INTERVAL_MS = 30;  // Update every 30ms for smooth bre
 WebServer server(80);
 DNSServer dnsServer;
 
+// -------------------- Preferences (NVS) for Language ------
+Preferences prefs;
+bool languageSet = false;  // True if user has selected a language (first-boot detection)
+
 // -------------------- RGB via FastLED ---------------------
 CRGB leds[NUM_PIXELS];
 
@@ -226,6 +250,7 @@ struct AppState {
   volatile uint8_t customR = 255;  // Custom color RGB components
   volatile uint8_t customG = 0;
   volatile uint8_t customB = 255;  // Default: magenta
+  volatile uint8_t language = LANG_EN;  // UI language (persistent via NVS)
   String text = "SOS";
   volatile bool playing = false;
 } state;
@@ -462,6 +487,7 @@ body{background:var(--bg);color:var(--text)}
 .seg{display:flex;gap:6px}
 .seg button{flex:1;border:0;border-radius:8px;padding:8px 4px;background:#171717;border:1px solid #2A2A2A;color:#ddd;font-size:12px;font-weight:500;cursor:pointer}
 .seg button.active{background:var(--accent);color:#000;border-color:var(--accent)}
+.seg button svg{width:18px;height:18px;fill:currentColor;vertical-align:middle}
 .color-row{display:flex;gap:8px;align-items:center}
 .color{width:28px;height:28px;border-radius:8px;border:1px solid #2A2A2A;cursor:pointer}
 .color.active{outline:2px solid var(--accent)}
@@ -486,6 +512,8 @@ input:checked + .slider:before{transform:translateX(20px);background:#111}
 .wpm-slider input[type="range"]::-webkit-slider-thumb{-webkit-appearance:none;width:20px;height:20px;border-radius:50%;background:var(--accent);cursor:pointer;border:2px solid #222}
 .wpm-slider input[type="range"]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;background:var(--accent);cursor:pointer;border:2px solid #222}
 .wpm-labels{display:flex;justify-content:space-between;font-size:9px;color:#666;margin-top:4px;padding:0 2px}
+.wpm-icon{font-size:20px;opacity:0.7;display:flex;align-items:center}
+.wpm-icon svg{width:20px;height:20px;fill:var(--muted)}
 .msg-input{width:100%;min-height:72px;background:#151515;border:1px solid #2A2A2A;border-radius:10px;padding:10px;color:#eee;font-size:16px;outline:none;resize:none;font-family:inherit;line-height:1.4}
 .msg-hint{font-size:13px;color:#FFD700;margin:6px 0;text-align:center}
 .msg-header{display:flex;align-items:baseline}
@@ -517,48 +545,87 @@ input:checked + .slider:before{transform:translateX(20px);background:#111}
 .ota-progress{width:100%;height:6px;border-radius:3px;margin:12px 0;display:none}
 .ota-status{text-align:center;font-size:12px;color:#888;margin-top:8px}
 .ota-version{text-align:center;font-size:11px;color:#666;margin-bottom:12px}
+/* RTL Support */
+[dir="rtl"]{direction:rtl;text-align:right}
+[dir="rtl"] .card{text-align:right}
+[dir="rtl"] .msg-input{text-align:right}
+[dir="rtl"] .footer{flex-direction:row-reverse}
+[dir="rtl"] .msg-header{flex-direction:row-reverse}
+[dir="rtl"] .max-hint{margin-left:0;margin-right:6px}
+[dir="rtl"] .tx-time{margin-left:0;margin-right:auto}
+[dir="rtl"] .wpm-row{flex-direction:row-reverse}
+[dir="rtl"] .dazzle-row{flex-direction:row-reverse}
+[dir="rtl"] .help-btn{margin-right:0;margin-left:8px}
+/* Language Selection Modal */
+.lang-modal{position:fixed;inset:0;background:rgba(0,0,0,.95);display:flex;align-items:center;justify-content:center;z-index:10000;opacity:0;pointer-events:none;transition:opacity .3s}
+.lang-modal.visible{opacity:1;pointer-events:auto}
+.lang-card{background:var(--card);border-radius:16px;padding:24px;width:90%;max-width:320px;text-align:center}
+.lang-card h2{color:#fff;font-size:18px;margin-bottom:8px}
+.lang-card p{color:#888;font-size:12px;margin-bottom:20px}
+.lang-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.lang-btn{padding:14px 8px;border-radius:10px;border:1px solid #333;background:#222;color:#fff;font-size:14px;cursor:pointer;transition:all .2s}
+.lang-btn:hover{background:#333;border-color:var(--accent)}
+.lang-btn.selected{background:var(--accent);color:#000;border-color:var(--accent)}
+.lang-native{display:block;font-size:12px;color:#888;margin-top:2px}
+.lang-btn.selected .lang-native{color:#333}
+.lang-confirm{margin-top:16px;width:100%;padding:14px;border-radius:10px;border:none;background:var(--primary);color:#000;font-weight:600;font-size:16px;cursor:pointer}
+.lang-confirm:disabled{background:#555;color:#888;cursor:not-allowed}
+/* Settings Language Section */
+.settings-lang{margin-top:16px;padding-top:16px;border-top:1px solid #333}
+.settings-lang h4{color:#888;font-size:11px;text-transform:uppercase;margin-bottom:10px}
+.settings-lang select{width:100%;padding:12px;border-radius:8px;border:1px solid #333;background:#222;color:#fff;font-size:14px;cursor:pointer}
 </style>
 </head>
 <body>
 
-<div id="splash"><img src="/bb.jpg" alt="Big Brother"><p>Click anywhere to send him a message...</p></div>
+<div id="splash"><img src="/bb.jpg" alt="Big Brother"><p id="splashText">Click anywhere to send him a message...</p></div>
+
+<!-- Language Selection Modal (First Boot) -->
+<div class="lang-modal" id="langModal">
+  <div class="lang-card">
+    <h2 id="langTitle">Select Language</h2>
+    <p id="langSubtitle">Choose your preferred language</p>
+    <div class="lang-grid" id="langGrid"></div>
+    <button class="lang-confirm" id="langConfirm" disabled>Continue</button>
+  </div>
+</div>
 
 <div class="appbar">The Signet</div>
 <div class="wrap">
 <div class="grid">
 
   <div class="card">
-    <h3 class="msg-header">Message <span class="max-hint">(MAX 200 Characters)</span><span class="tx-time" id="txTime"></span></h3>
+    <h3 class="msg-header"><span id="lblMessage">Message</span> <span class="max-hint" id="lblMaxChars">(MAX 200 Characters)</span><span class="tx-time" id="txTime"></span></h3>
     <textarea class="msg-input" id="msg" placeholder="SOS" maxlength="200" rows="3"></textarea>
-    <div class="msg-hint">A-Z 0-9 . , ? / - ( ) @ = space &lt;KA&gt; &lt;AR&gt;</div>
+    <div class="msg-hint" id="lblHint">A-Z 0-9 . , ? / - ( ) @ = space &lt;KA&gt; &lt;AR&gt;</div>
     <div class="btn-row">
-      <button class="play" id="play">&#9654; Play</button>
-      <button class="stop" id="stop">&#9632; Stop</button>
+      <button class="play" id="play" title="Play">&#9654;</button>
+      <button class="stop" id="stop" title="Stop">&#9632;</button>
     </div>
     <div class="status" id="status">Idle</div>
   </div>
 
   <div class="row-2">
     <div class="card">
-      <h3>Mode</h3>
+      <h3 id="lblMode">Mode</h3>
       <div class="seg" id="modeGroup">
-        <button data-mode="DISCREET">IR</button>
-        <button data-mode="VISIBLE">RGB</button>
+        <button data-mode="DISCREET" id="btnIR" title="IR/Invisible"><svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M12 7c2.76 0 5 2.24 5 5 0 .65-.13 1.26-.36 1.83l2.92 2.92c1.51-1.26 2.7-2.89 3.43-4.75-1.73-4.39-6-7.5-11-7.5-1.4 0-2.74.25-3.98.7l2.16 2.16C10.74 7.13 11.35 7 12 7zM2 4.27l2.28 2.28.46.46A11.804 11.804 0 001 12c1.73 4.39 6 7.5 11 7.5 1.55 0 3.03-.3 4.38-.84l.42.42L19.73 22 21 20.73 3.27 3 2 4.27zM7.53 9.8l1.55 1.55c-.05.21-.08.43-.08.65 0 1.66 1.34 3 3 3 .22 0 .44-.03.65-.08l1.55 1.55c-.67.33-1.41.53-2.2.53-2.76 0-5-2.24-5-5 0-.79.2-1.53.53-2.2zm4.31-.78l3.15 3.15.02-.16c0-1.66-1.34-3-3-3l-.17.01z"/></svg></button>
+        <button data-mode="VISIBLE" id="btnRGB" title="RGB/Visible"><svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg></button>
       </div>
     </div>
     <div class="card">
-      <h3>Intensity</h3>
+      <h3 id="lblIntensity">Intensity</h3>
       <div class="seg" id="intensityGroup">
-        <button data-int="LOW">Lo</button>
-        <button data-int="MED">Med</button>
-        <button data-int="HIGH">Hi</button>
+        <button data-int="LOW" id="btnLo" title="Low"><svg viewBox="0 0 24 24" width="18" height="18"><circle cx="12" cy="12" r="4" fill="currentColor"/><line x1="12" y1="2" x2="12" y2="5" stroke="currentColor" stroke-width="2"/><line x1="12" y1="19" x2="12" y2="22" stroke="currentColor" stroke-width="2"/><line x1="2" y1="12" x2="5" y2="12" stroke="currentColor" stroke-width="2"/><line x1="19" y1="12" x2="22" y2="12" stroke="currentColor" stroke-width="2"/></svg></button>
+        <button data-int="MED" id="btnMed" title="Medium"><svg viewBox="0 0 24 24" width="18" height="18"><circle cx="12" cy="12" r="4" fill="currentColor"/><line x1="12" y1="1" x2="12" y2="5" stroke="currentColor" stroke-width="2"/><line x1="12" y1="19" x2="12" y2="23" stroke="currentColor" stroke-width="2"/><line x1="1" y1="12" x2="5" y2="12" stroke="currentColor" stroke-width="2"/><line x1="19" y1="12" x2="23" y2="12" stroke="currentColor" stroke-width="2"/><line x1="4.22" y1="4.22" x2="6.64" y2="6.64" stroke="currentColor" stroke-width="2"/><line x1="17.36" y1="17.36" x2="19.78" y2="19.78" stroke="currentColor" stroke-width="2"/><line x1="4.22" y1="19.78" x2="6.64" y2="17.36" stroke="currentColor" stroke-width="2"/><line x1="17.36" y1="6.64" x2="19.78" y2="4.22" stroke="currentColor" stroke-width="2"/></svg></button>
+        <button data-int="HIGH" id="btnHi" title="High"><svg viewBox="0 0 24 24" width="18" height="18"><circle cx="12" cy="12" r="5" fill="currentColor"/><line x1="12" y1="0" x2="12" y2="5" stroke="currentColor" stroke-width="2.5"/><line x1="12" y1="19" x2="12" y2="24" stroke="currentColor" stroke-width="2.5"/><line x1="0" y1="12" x2="5" y2="12" stroke="currentColor" stroke-width="2.5"/><line x1="19" y1="12" x2="24" y2="12" stroke="currentColor" stroke-width="2.5"/><line x1="3.5" y1="3.5" x2="6.64" y2="6.64" stroke="currentColor" stroke-width="2.5"/><line x1="17.36" y1="17.36" x2="20.5" y2="20.5" stroke="currentColor" stroke-width="2.5"/><line x1="3.5" y1="20.5" x2="6.64" y2="17.36" stroke="currentColor" stroke-width="2.5"/><line x1="17.36" y1="6.64" x2="20.5" y2="3.5" stroke="currentColor" stroke-width="2.5"/></svg></button>
       </div>
     </div>
   </div>
 
   <div class="row-2">
     <div class="card" id="colorCard">
-      <h3>Color</h3>
+      <h3 id="lblColor">Color</h3>
       <div class="color-row" id="colorGroup">
         <div class="color red" data-color="RED"></div>
         <div class="color green" data-color="GREEN"></div>
@@ -570,41 +637,44 @@ input:checked + .slider:before{transform:translateX(20px);background:#111}
       </div>
     </div>
     <div class="card" id="dazzleCard">
-      <h3>Dazzle</h3>
+      <h3 id="lblDazzle">Dazzle</h3>
       <div class="dazzle-row">
         <label class="switch"><input type="checkbox" id="dazzle"><span class="slider"></span></label>
-        <span>RGB flash</span>
       </div>
     </div>
   </div>
 
   <div class="card">
-    <h3>Speed</h3>
     <div class="wpm-row">
-      <div class="wpm-val"><span id="wpmDisplay">10</span> <small>WPM</small></div>
+      <span class="wpm-icon">&#128034;</span>
       <div class="wpm-slider">
         <input type="range" id="wpm" min="5" max="20" step="5" value="10">
-        <div class="wpm-labels"><span>5</span><span>10</span><span>15</span><span>20</span></div>
       </div>
+      <span class="wpm-icon">&#128007;</span>
     </div>
+    <div class="wpm-val" style="text-align:center;margin-top:8px"><span id="wpmDisplay">10</span> <small>WPM</small></div>
   </div>
 
 </div>
-<div class="footer"><a href="/help" class="help-btn">?</a><span class="footer-text">1984 was not an instruction manual</span><button class="settings-btn" id="settingsBtn">&#9881;</button></div>
+<div class="footer"><a href="/help" class="help-btn">?</a><span class="footer-text" id="footerText">1984 was not an instruction manual</span><button class="settings-btn" id="settingsBtn">&#9881;</button></div>
 <div class="version" id="version"></div>
 </div>
 
 <!-- OTA Modal -->
 <div class="ota-modal" id="otaModal">
   <div class="ota-card">
-    <h3>Firmware Update</h3>
-    <div class="ota-version">Current: v<span id="otaVersion">-</span></div>
+    <h3 id="otaTitle">Firmware Update</h3>
+    <div class="ota-version"><span id="otaCurrent">Current</span>: v<span id="otaVersion">-</span></div>
     <input type="file" id="otaFile" accept=".bin" style="position:absolute;opacity:0;width:1px;height:1px">
-    <label for="otaFile" class="ota-btn" style="display:block;text-align:center;background:#333;color:#fff;margin-bottom:14px;cursor:pointer">Choose .bin File</label>
+    <label for="otaFile" class="ota-btn" id="otaChooseLabel" style="display:block;text-align:center;background:#333;color:#fff;margin-bottom:14px;cursor:pointer">Choose .bin File</label>
     <div id="otaFileName" style="text-align:center;font-size:12px;color:#888;margin-bottom:14px">No file selected</div>
     <button class="ota-btn" id="otaUpload">Upload Firmware</button>
     <progress class="ota-progress" id="otaProgress" value="0" max="100"></progress>
     <div class="ota-status" id="otaStatus"></div>
+    <div class="settings-lang">
+      <h4 id="lblLanguage">Language</h4>
+      <select id="langSelect"></select>
+    </div>
     <button class="ota-btn" id="otaClose" style="margin-top:12px;background:#333;color:#fff">Close</button>
   </div>
 </div>
@@ -612,8 +682,8 @@ input:checked + .slider:before{transform:translateX(20px);background:#111}
 <!-- Android Browser Dialog -->
 <div class="ota-modal" id="androidDialog">
   <div class="ota-card">
-    <h3>Open in Browser</h3>
-    <p style="font-size:13px;color:#ccc;text-align:center;margin-bottom:16px">Android requires a full browser for firmware updates. Copy the link and open it in Chrome.</p>
+    <h3 id="androidTitle">Open in Browser</h3>
+    <p id="androidDesc" style="font-size:13px;color:#ccc;text-align:center;margin-bottom:16px">Android requires a full browser for firmware updates. Copy the link and open it in Chrome.</p>
     <button class="ota-btn" id="copyLinkBtn">Copy Link</button>
     <div id="copyStatus" style="text-align:center;font-size:12px;color:#888;margin-top:8px"></div>
     <button class="ota-btn" id="androidClose" style="margin-top:12px;background:#333;color:#fff">Close</button>
@@ -622,8 +692,200 @@ input:checked + .slider:before{transform:translateX(20px);background:#111}
 
 <script>
 const SPLASH_KEY = 'signet_splash_seen';
+const LANG_KEY = 'signet_lang';
 const MORSE={A:'.-',B:'-...',C:'-.-.',D:'-..',E:'.',F:'..-.',G:'--.',H:'....',I:'..',J:'.---',K:'-.-',L:'.-..',M:'--',N:'-.',O:'---',P:'.--.',Q:'--.-',R:'.-.',S:'...',T:'-',U:'..-',V:'...-',W:'.--',X:'-..-',Y:'-.--',Z:'--..',0:'-----',1:'.----',2:'..---',3:'...--',4:'....-',5:'.....',6:'-....',7:'--...',8:'---..',9:'----.','.':'.-.-.-',',':'--..--','?':'..--..','/':'-..-.','-':'-....-','(':'-.--.',')':'-.--.-','@':'.--.-.','=':'-...-'};
 const PROSIGNS={KA:'-.-.-',AR:'.-.-.'};
+
+// Translations for all supported languages
+const LANG = {
+  en: { name:'English', native:'English', dir:'ltr',
+    splash:'Click anywhere to send him a message...',
+    message:'Message', maxChars:'(MAX 200 Characters)', hint:'A-Z 0-9 . , ? / - ( ) @ = space <KA> <AR>',
+    idle:'Idle', playing:'Playing\u2026',
+    mode:'Mode', intensity:'Intensity', color:'Color', dazzle:'Dazzle',
+    footer:'1984 was not an instruction manual', firmware:'Firmware',
+    fwUpdate:'Firmware Update', current:'Current', chooseBin:'Choose .bin File', noFile:'No file selected',
+    uploadFw:'Upload Firmware', uploading:'Uploading...', success:'Success! Rebooting...', updateFailed:'Update failed',
+    netError:'Network error', selectBin:'Select a .bin file', errBin:'Error: Select a .bin file',
+    openBrowser:'Open in Browser', androidDesc:'Android requires a full browser for firmware updates. Copy the link and open it in Chrome.',
+    copyLink:'Copy Link', copied:'Copied! Open Chrome and paste.', copyFailed:'Copy failed. Type: 192.168.4.1', close:'Close',
+    language:'Language', selectLang:'Select Language', chooseLang:'Choose your preferred language', continue:'Continue'
+  },
+  es: { name:'Spanish', native:'Espa\u00F1ol', dir:'ltr',
+    splash:'Haz clic en cualquier lugar para enviarle un mensaje...',
+    message:'Mensaje', maxChars:'(M\u00C1X 200 Caracteres)', hint:'A-Z 0-9 . , ? / - ( ) @ = espacio <KA> <AR>',
+    idle:'Inactivo', playing:'Reproduciendo\u2026',
+    mode:'Modo', intensity:'Intensidad', color:'Color', dazzle:'Destello',
+    footer:'1984 no era un manual de instrucciones', firmware:'Firmware',
+    fwUpdate:'Actualizar Firmware', current:'Actual', chooseBin:'Elegir archivo .bin', noFile:'Ning\u00FAn archivo seleccionado',
+    uploadFw:'Subir Firmware', uploading:'Subiendo...', success:'\u00A1\u00C9xito! Reiniciando...', updateFailed:'Actualizaci\u00F3n fallida',
+    netError:'Error de red', selectBin:'Selecciona un archivo .bin', errBin:'Error: Selecciona un archivo .bin',
+    openBrowser:'Abrir en Navegador', androidDesc:'Android requiere un navegador completo para actualizaciones. Copia el enlace y \u00E1brelo en Chrome.',
+    copyLink:'Copiar Enlace', copied:'\u00A1Copiado! Abre Chrome y pega.', copyFailed:'Copia fallida. Escribe: 192.168.4.1', close:'Cerrar',
+    language:'Idioma', selectLang:'Seleccionar Idioma', chooseLang:'Elige tu idioma preferido', continue:'Continuar'
+  },
+  fr: { name:'French', native:'Fran\u00E7ais', dir:'ltr',
+    splash:'Cliquez n\'importe o\u00F9 pour lui envoyer un message...',
+    message:'Message', maxChars:'(MAX 200 Caract\u00E8res)', hint:'A-Z 0-9 . , ? / - ( ) @ = espace <KA> <AR>',
+    idle:'Inactif', playing:'Lecture\u2026',
+    mode:'Mode', intensity:'Intensit\u00E9', color:'Couleur', dazzle:'\u00C9blouir',
+    footer:'1984 n\'\u00E9tait pas un manuel d\'instructions', firmware:'Firmware',
+    fwUpdate:'Mise \u00E0 jour Firmware', current:'Actuel', chooseBin:'Choisir fichier .bin', noFile:'Aucun fichier s\u00E9lectionn\u00E9',
+    uploadFw:'T\u00E9l\u00E9verser Firmware', uploading:'T\u00E9l\u00E9versement...', success:'Succ\u00E8s! Red\u00E9marrage...', updateFailed:'\u00C9chec de mise \u00E0 jour',
+    netError:'Erreur r\u00E9seau', selectBin:'S\u00E9lectionnez un fichier .bin', errBin:'Erreur: S\u00E9lectionnez un fichier .bin',
+    openBrowser:'Ouvrir dans Navigateur', androidDesc:'Android n\u00E9cessite un navigateur complet pour les mises \u00E0 jour. Copiez le lien et ouvrez-le dans Chrome.',
+    copyLink:'Copier Lien', copied:'Copi\u00E9! Ouvrez Chrome et collez.', copyFailed:'\u00C9chec de copie. Tapez: 192.168.4.1', close:'Fermer',
+    language:'Langue', selectLang:'S\u00E9lectionner Langue', chooseLang:'Choisissez votre langue pr\u00E9f\u00E9r\u00E9e', continue:'Continuer'
+  },
+  ru: { name:'Russian', native:'\u0420\u0443\u0441\u0441\u043A\u0438\u0439', dir:'ltr',
+    splash:'\u041D\u0430\u0436\u043C\u0438\u0442\u0435 \u0432 \u043B\u044E\u0431\u043E\u043C \u043C\u0435\u0441\u0442\u0435, \u0447\u0442\u043E\u0431\u044B \u043E\u0442\u043F\u0440\u0430\u0432\u0438\u0442\u044C \u0435\u043C\u0443 \u0441\u043E\u043E\u0431\u0449\u0435\u043D\u0438\u0435...',
+    message:'\u0421\u043E\u043E\u0431\u0449\u0435\u043D\u0438\u0435', maxChars:'(\u041C\u0410\u041A\u0421 200 \u0441\u0438\u043C\u0432\u043E\u043B\u043E\u0432)', hint:'A-Z 0-9 . , ? / - ( ) @ = \u043F\u0440\u043E\u0431\u0435\u043B <KA> <AR>',
+    idle:'\u041E\u0436\u0438\u0434\u0430\u043D\u0438\u0435', playing:'\u0412\u043E\u0441\u043F\u0440\u043E\u0438\u0437\u0432\u0435\u0434\u0435\u043D\u0438\u0435\u2026',
+    mode:'\u0420\u0435\u0436\u0438\u043C', intensity:'\u0418\u043D\u0442\u0435\u043D\u0441.', color:'\u0426\u0432\u0435\u0442', dazzle:'\u0412\u0441\u043F\u044B\u0448\u043A\u0430',
+    footer:'1984 \u043D\u0435 \u0431\u044B\u043B \u0438\u043D\u0441\u0442\u0440\u0443\u043A\u0446\u0438\u0435\u0439', firmware:'\u041F\u0440\u043E\u0448\u0438\u0432\u043A\u0430',
+    fwUpdate:'\u041E\u0431\u043D\u043E\u0432\u043B\u0435\u043D\u0438\u0435 \u043F\u0440\u043E\u0448\u0438\u0432\u043A\u0438', current:'\u0422\u0435\u043A\u0443\u0449\u0430\u044F', chooseBin:'\u0412\u044B\u0431\u0440\u0430\u0442\u044C .bin', noFile:'\u0424\u0430\u0439\u043B \u043D\u0435 \u0432\u044B\u0431\u0440\u0430\u043D',
+    uploadFw:'\u0417\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044C', uploading:'\u0417\u0430\u0433\u0440\u0443\u0437\u043A\u0430...', success:'\u0423\u0441\u043F\u0435\u0445! \u041F\u0435\u0440\u0435\u0437\u0430\u0433\u0440\u0443\u0437\u043A\u0430...', updateFailed:'\u041E\u0448\u0438\u0431\u043A\u0430 \u043E\u0431\u043D\u043E\u0432\u043B\u0435\u043D\u0438\u044F',
+    netError:'\u041E\u0448\u0438\u0431\u043A\u0430 \u0441\u0435\u0442\u0438', selectBin:'\u0412\u044B\u0431\u0435\u0440\u0438\u0442\u0435 .bin', errBin:'\u041E\u0448\u0438\u0431\u043A\u0430: \u0412\u044B\u0431\u0435\u0440\u0438\u0442\u0435 .bin',
+    openBrowser:'\u041E\u0442\u043A\u0440\u044B\u0442\u044C \u0432 \u0431\u0440\u0430\u0443\u0437\u0435\u0440\u0435', androidDesc:'Android \u0442\u0440\u0435\u0431\u0443\u0435\u0442 \u043F\u043E\u043B\u043D\u044B\u0439 \u0431\u0440\u0430\u0443\u0437\u0435\u0440. \u0421\u043A\u043E\u043F\u0438\u0440\u0443\u0439\u0442\u0435 \u0441\u0441\u044B\u043B\u043A\u0443 \u0438 \u043E\u0442\u043A\u0440\u043E\u0439\u0442\u0435 \u0432 Chrome.',
+    copyLink:'\u041A\u043E\u043F\u0438\u0440\u043E\u0432\u0430\u0442\u044C', copied:'\u0421\u043A\u043E\u043F\u0438\u0440\u043E\u0432\u0430\u043D\u043E! \u041E\u0442\u043A\u0440\u043E\u0439\u0442\u0435 Chrome.', copyFailed:'\u041E\u0448\u0438\u0431\u043A\u0430. \u0412\u0432\u0435\u0434\u0438\u0442\u0435: 192.168.4.1', close:'\u0417\u0430\u043A\u0440\u044B\u0442\u044C',
+    language:'\u042F\u0437\u044B\u043A', selectLang:'\u0412\u044B\u0431\u0440\u0430\u0442\u044C \u044F\u0437\u044B\u043A', chooseLang:'\u0412\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u043F\u0440\u0435\u0434\u043F\u043E\u0447\u0438\u0442\u0430\u0435\u043C\u044B\u0439 \u044F\u0437\u044B\u043A', continue:'\u041F\u0440\u043E\u0434\u043E\u043B\u0436\u0438\u0442\u044C'
+  },
+  'zh-CN': { name:'Simplified Chinese', native:'\u7B80\u4F53\u4E2D\u6587', dir:'ltr',
+    splash:'\u70B9\u51FB\u4EFB\u610F\u4F4D\u7F6E\u7ED9\u4ED6\u53D1\u9001\u6D88\u606F...',
+    message:'\u6D88\u606F', maxChars:'(\u6700\u591A200\u5B57\u7B26)', hint:'A-Z 0-9 . , ? / - ( ) @ = \u7A7A\u683C <KA> <AR>',
+    idle:'\u7A7A\u95F2', playing:'\u64AD\u653E\u4E2D\u2026',
+    mode:'\u6A21\u5F0F', intensity:'\u5F3A\u5EA6', color:'\u989C\u8272', dazzle:'\u95EA\u70C1',
+    footer:'1984\u4E0D\u662F\u64CD\u4F5C\u624B\u518C', firmware:'\u56FA\u4EF6',
+    fwUpdate:'\u56FA\u4EF6\u66F4\u65B0', current:'\u5F53\u524D', chooseBin:'\u9009\u62E9.bin\u6587\u4EF6', noFile:'\u672A\u9009\u62E9\u6587\u4EF6',
+    uploadFw:'\u4E0A\u4F20\u56FA\u4EF6', uploading:'\u4E0A\u4F20\u4E2D...', success:'\u6210\u529F\uFF01\u91CD\u542F\u4E2D...', updateFailed:'\u66F4\u65B0\u5931\u8D25',
+    netError:'\u7F51\u7EDC\u9519\u8BEF', selectBin:'\u8BF7\u9009\u62E9.bin\u6587\u4EF6', errBin:'\u9519\u8BEF\uFF1A\u8BF7\u9009\u62E9.bin\u6587\u4EF6',
+    openBrowser:'\u5728\u6D4F\u89C8\u5668\u4E2D\u6253\u5F00', androidDesc:'Android\u9700\u8981\u5B8C\u6574\u6D4F\u89C8\u5668\u8FDB\u884C\u56FA\u4EF6\u66F4\u65B0\u3002\u590D\u5236\u94FE\u63A5\u5E76\u5728Chrome\u4E2D\u6253\u5F00\u3002',
+    copyLink:'\u590D\u5236\u94FE\u63A5', copied:'\u5DF2\u590D\u5236\uFF01\u5728Chrome\u4E2D\u7C98\u8D34\u3002', copyFailed:'\u590D\u5236\u5931\u8D25\u3002\u8F93\u5165\uFF1A192.168.4.1', close:'\u5173\u95ED',
+    language:'\u8BED\u8A00', selectLang:'\u9009\u62E9\u8BED\u8A00', chooseLang:'\u9009\u62E9\u60A8\u7684\u9996\u9009\u8BED\u8A00', continue:'\u7EE7\u7EED'
+  },
+  'zh-TW': { name:'Traditional Chinese', native:'\u7E41\u9AD4\u4E2D\u6587', dir:'ltr',
+    splash:'\u9EDE\u64CA\u4EFB\u610F\u4F4D\u7F6E\u7D66\u4ED6\u767C\u9001\u8A0A\u606F...',
+    message:'\u8A0A\u606F', maxChars:'(\u6700\u591A200\u5B57\u5143)', hint:'A-Z 0-9 . , ? / - ( ) @ = \u7A7A\u683C <KA> <AR>',
+    idle:'\u9592\u7F6E', playing:'\u64AD\u653E\u4E2D\u2026',
+    mode:'\u6A21\u5F0F', intensity:'\u5F37\u5EA6', color:'\u984F\u8272', dazzle:'\u9583\u720D',
+    footer:'1984\u4E0D\u662F\u64CD\u4F5C\u624B\u518A', firmware:'\u97CC\u9AD4',
+    fwUpdate:'\u97CC\u9AD4\u66F4\u65B0', current:'\u76EE\u524D', chooseBin:'\u9078\u64C7.bin\u6A94\u6848', noFile:'\u672A\u9078\u64C7\u6A94\u6848',
+    uploadFw:'\u4E0A\u50B3\u97CC\u9AD4', uploading:'\u4E0A\u50B3\u4E2D...', success:'\u6210\u529F\uFF01\u91CD\u555F\u4E2D...', updateFailed:'\u66F4\u65B0\u5931\u6557',
+    netError:'\u7DB2\u8DEF\u932F\u8AA4', selectBin:'\u8ACB\u9078\u64C7.bin\u6A94\u6848', errBin:'\u932F\u8AA4\uFF1A\u8ACB\u9078\u64C7.bin\u6A94\u6848',
+    openBrowser:'\u5728\u700F\u89BD\u5668\u4E2D\u958B\u555F', androidDesc:'Android\u9700\u8981\u5B8C\u6574\u700F\u89BD\u5668\u9032\u884C\u97CC\u9AD4\u66F4\u65B0\u3002\u8907\u88FD\u9023\u7D50\u4E26\u5728Chrome\u4E2D\u958B\u555F\u3002',
+    copyLink:'\u8907\u88FD\u9023\u7D50', copied:'\u5DF2\u8907\u88FD\uFF01\u5728Chrome\u4E2D\u8CBB\u4E0A\u3002', copyFailed:'\u8907\u88FD\u5931\u6557\u3002\u8F38\u5165\uFF1A192.168.4.1', close:'\u95DC\u9589',
+    language:'\u8A9E\u8A00', selectLang:'\u9078\u64C7\u8A9E\u8A00', chooseLang:'\u9078\u64C7\u60A8\u7684\u9996\u9078\u8A9E\u8A00', continue:'\u7E7C\u7E8C'
+  },
+  fa: { name:'Farsi', native:'\u0641\u0627\u0631\u0633\u06CC', dir:'rtl',
+    splash:'\u0628\u0631\u0627\u06CC \u0627\u0631\u0633\u0627\u0644 \u067E\u06CC\u0627\u0645 \u0628\u0647 \u0627\u0648\u060C \u0647\u0631 \u062C\u0627\u06CC\u06CC \u06A9\u0644\u06CC\u06A9 \u06A9\u0646\u06CC\u062F...',
+    message:'\u067E\u06CC\u0627\u0645', maxChars:'(\u062D\u062F\u0627\u06A9\u062B\u0631 \u06F2\u06F0\u06F0 \u06A9\u0627\u0631\u0627\u06A9\u062A\u0631)', hint:'A-Z 0-9 . , ? / - ( ) @ = \u0641\u0627\u0635\u0644\u0647 <KA> <AR>',
+    idle:'\u0622\u0645\u0627\u062F\u0647', playing:'\u062F\u0631 \u062D\u0627\u0644 \u067E\u062E\u0634\u2026',
+    mode:'\u062D\u0627\u0644\u062A', intensity:'\u0634\u062F\u062A', color:'\u0631\u0646\u06AF', dazzle:'\u062F\u0631\u062E\u0634\u0634',
+    footer:'\u06F1\u06F9\u06F8\u06F4 \u06CC\u06A9 \u06A9\u062A\u0627\u0628 \u0631\u0627\u0647\u0646\u0645\u0627 \u0646\u0628\u0648\u062F', firmware:'\u0641\u0631\u06CC\u0645\u0648\u0631',
+    fwUpdate:'\u0628\u0631\u0648\u0632\u0631\u0633\u0627\u0646\u06CC \u0641\u0631\u06CC\u0645\u0648\u0631', current:'\u0641\u0639\u0644\u06CC', chooseBin:'\u0627\u0646\u062A\u062E\u0627\u0628 \u0641\u0627\u06CC\u0644 .bin', noFile:'\u0641\u0627\u06CC\u0644\u06CC \u0627\u0646\u062A\u062E\u0627\u0628 \u0646\u0634\u062F\u0647',
+    uploadFw:'\u0628\u0627\u0631\u06AF\u0630\u0627\u0631\u06CC', uploading:'\u062F\u0631 \u062D\u0627\u0644 \u0628\u0627\u0631\u06AF\u0630\u0627\u0631\u06CC...', success:'\u0645\u0648\u0641\u0642! \u0631\u0627\u0647\u200C\u0627\u0646\u062F\u0627\u0632\u06CC \u0645\u062C\u062F\u062F...', updateFailed:'\u0628\u0631\u0648\u0632\u0631\u0633\u0627\u0646\u06CC \u0646\u0627\u0645\u0648\u0641\u0642',
+    netError:'\u062E\u0637\u0627\u06CC \u0634\u0628\u06A9\u0647', selectBin:'\u06CC\u06A9 \u0641\u0627\u06CC\u0644 .bin \u0627\u0646\u062A\u062E\u0627\u0628 \u06A9\u0646\u06CC\u062F', errBin:'\u062E\u0637\u0627: \u0641\u0627\u06CC\u0644 .bin \u0627\u0646\u062A\u062E\u0627\u0628 \u06A9\u0646\u06CC\u062F',
+    openBrowser:'\u0628\u0627\u0632 \u06A9\u0631\u062F\u0646 \u062F\u0631 \u0645\u0631\u0648\u0631\u06AF\u0631', androidDesc:'\u0627\u0646\u062F\u0631\u0648\u06CC\u062F \u0628\u0647 \u0645\u0631\u0648\u0631\u06AF\u0631 \u06A9\u0627\u0645\u0644 \u0646\u06CC\u0627\u0632 \u062F\u0627\u0631\u062F. \u0644\u06CC\u0646\u06A9 \u0631\u0627 \u06A9\u067E\u06CC \u06A9\u0646\u06CC\u062F \u0648 \u062F\u0631 Chrome \u0628\u0627\u0632 \u06A9\u0646\u06CC\u062F.',
+    copyLink:'\u06A9\u067E\u06CC \u0644\u06CC\u0646\u06A9', copied:'\u06A9\u067E\u06CC \u0634\u062F! Chrome \u0631\u0627 \u0628\u0627\u0632 \u06A9\u0646\u06CC\u062F.', copyFailed:'\u06A9\u067E\u06CC \u0646\u0634\u062F. \u062A\u0627\u06CC\u067E \u06A9\u0646\u06CC\u062F: 192.168.4.1', close:'\u0628\u0633\u062A\u0646',
+    language:'\u0632\u0628\u0627\u0646', selectLang:'\u0627\u0646\u062A\u062E\u0627\u0628 \u0632\u0628\u0627\u0646', chooseLang:'\u0632\u0628\u0627\u0646 \u0645\u0648\u0631\u062F \u0646\u0638\u0631 \u062E\u0648\u062F \u0631\u0627 \u0627\u0646\u062A\u062E\u0627\u0628 \u06A9\u0646\u06CC\u062F', continue:'\u0627\u062F\u0627\u0645\u0647'
+  },
+  ar: { name:'Arabic', native:'\u0627\u0644\u0639\u0631\u0628\u064A\u0629', dir:'rtl',
+    splash:'\u0627\u0646\u0642\u0631 \u0641\u064A \u0623\u064A \u0645\u0643\u0627\u0646 \u0644\u0625\u0631\u0633\u0627\u0644 \u0631\u0633\u0627\u0644\u0629 \u0625\u0644\u064A\u0647...',
+    message:'\u0631\u0633\u0627\u0644\u0629', maxChars:'(\u0623\u0642\u0635\u0649 \u0662\u0660\u0660 \u062D\u0631\u0641)', hint:'A-Z 0-9 . , ? / - ( ) @ = \u0645\u0633\u0627\u0641\u0629 <KA> <AR>',
+    idle:'\u062E\u0627\u0645\u0644', playing:'\u062C\u0627\u0631\u064A \u0627\u0644\u062A\u0634\u063A\u064A\u0644\u2026',
+    mode:'\u0627\u0644\u0648\u0636\u0639', intensity:'\u0627\u0644\u0634\u062F\u0629', color:'\u0627\u0644\u0644\u0648\u0646', dazzle:'\u0648\u0645\u064A\u0636',
+    footer:'\u0661\u0669\u0668\u0664 \u0644\u0645 \u064A\u0643\u0646 \u062F\u0644\u064A\u0644 \u062A\u0639\u0644\u064A\u0645\u0627\u062A', firmware:'\u0628\u0631\u0646\u0627\u0645\u062C \u062B\u0627\u0628\u062A',
+    fwUpdate:'\u062A\u062D\u062F\u064A\u062B \u0627\u0644\u0628\u0631\u0646\u0627\u0645\u062C', current:'\u0627\u0644\u062D\u0627\u0644\u064A', chooseBin:'\u0627\u062E\u062A\u0631 \u0645\u0644\u0641 .bin', noFile:'\u0644\u0645 \u064A\u062A\u0645 \u0627\u062E\u062A\u064A\u0627\u0631 \u0645\u0644\u0641',
+    uploadFw:'\u0631\u0641\u0639 \u0627\u0644\u0628\u0631\u0646\u0627\u0645\u062C', uploading:'\u062C\u0627\u0631\u064A \u0627\u0644\u0631\u0641\u0639...', success:'\u0646\u062C\u0627\u062D! \u0625\u0639\u0627\u062F\u0629 \u0627\u0644\u062A\u0634\u063A\u064A\u0644...', updateFailed:'\u0641\u0634\u0644 \u0627\u0644\u062A\u062D\u062F\u064A\u062B',
+    netError:'\u062E\u0637\u0623 \u0641\u064A \u0627\u0644\u0634\u0628\u0643\u0629', selectBin:'\u0627\u062E\u062A\u0631 \u0645\u0644\u0641 .bin', errBin:'\u062E\u0637\u0623: \u0627\u062E\u062A\u0631 \u0645\u0644\u0641 .bin',
+    openBrowser:'\u0641\u062A\u062D \u0641\u064A \u0627\u0644\u0645\u062A\u0635\u0641\u062D', androidDesc:'\u064A\u062A\u0637\u0644\u0628 \u0623\u0646\u062F\u0631\u0648\u064A\u062F \u0645\u062A\u0635\u0641\u062D\u0627\u064B \u0643\u0627\u0645\u0644\u0627\u064B. \u0627\u0646\u0633\u062E \u0627\u0644\u0631\u0627\u0628\u0637 \u0648\u0627\u0641\u062A\u062D\u0647 \u0641\u064A Chrome.',
+    copyLink:'\u0646\u0633\u062E \u0627\u0644\u0631\u0627\u0628\u0637', copied:'\u062A\u0645 \u0627\u0644\u0646\u0633\u062E! \u0627\u0641\u062A\u062D Chrome.', copyFailed:'\u0641\u0634\u0644 \u0627\u0644\u0646\u0633\u062E. \u0627\u0643\u062A\u0628: 192.168.4.1', close:'\u0625\u063A\u0644\u0627\u0642',
+    language:'\u0627\u0644\u0644\u063A\u0629', selectLang:'\u0627\u062E\u062A\u064A\u0627\u0631 \u0627\u0644\u0644\u063A\u0629', chooseLang:'\u0627\u062E\u062A\u0631 \u0644\u063A\u062A\u0643 \u0627\u0644\u0645\u0641\u0636\u0644\u0629', continue:'\u0645\u062A\u0627\u0628\u0639\u0629'
+  }
+};
+
+const LANG_ORDER = ['en','es','fr','ru','zh-CN','zh-TW','fa','ar'];
+let currentLang = 'en';
+
+function applyLanguage(code) {
+  const L = LANG[code];
+  if (!L) return;
+  currentLang = code;
+  document.documentElement.lang = code;
+  document.documentElement.dir = L.dir;
+  // Splash
+  const splashText = document.getElementById('splashText');
+  if (splashText) splashText.textContent = L.splash;
+  // Main UI
+  const setText = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
+  setText('lblMessage', L.message);
+  setText('lblMaxChars', L.maxChars);
+  setText('lblHint', L.hint);
+  setText('lblMode', L.mode);
+  setText('lblIntensity', L.intensity);
+  setText('lblColor', L.color);
+  setText('lblDazzle', L.dazzle);
+  setText('footerText', L.footer);
+  // OTA Modal
+  setText('otaTitle', L.fwUpdate);
+  setText('otaCurrent', L.current);
+  setText('otaChooseLabel', L.chooseBin);
+  setText('otaUpload', L.uploadFw);
+  setText('otaClose', L.close);
+  setText('lblLanguage', L.language);
+  // Android Dialog
+  setText('androidTitle', L.openBrowser);
+  setText('androidDesc', L.androidDesc);
+  setText('copyLinkBtn', L.copyLink);
+  setText('androidClose', L.close);
+  // Language Modal
+  setText('langTitle', L.selectLang);
+  setText('langSubtitle', L.chooseLang);
+  setText('langConfirm', L.continue);
+  // Update language dropdown
+  const langSelect = document.getElementById('langSelect');
+  if (langSelect) langSelect.value = code;
+  // Store locally
+  try { if (window.localStorage) localStorage.setItem(LANG_KEY, code); } catch(e){}
+}
+
+function buildLangGrid() {
+  const grid = document.getElementById('langGrid');
+  if (!grid) return;
+  grid.innerHTML = '';
+  LANG_ORDER.forEach(code => {
+    const L = LANG[code];
+    const btn = document.createElement('button');
+    btn.className = 'lang-btn';
+    btn.dataset.lang = code;
+    btn.innerHTML = L.name + '<span class="lang-native">' + L.native + '</span>';
+    btn.onclick = () => {
+      grid.querySelectorAll('.lang-btn').forEach(b => b.classList.remove('selected'));
+      btn.classList.add('selected');
+      document.getElementById('langConfirm').disabled = false;
+    };
+    grid.appendChild(btn);
+  });
+}
+
+function buildLangSelect() {
+  const sel = document.getElementById('langSelect');
+  if (!sel) return;
+  sel.innerHTML = '';
+  LANG_ORDER.forEach(code => {
+    const L = LANG[code];
+    const opt = document.createElement('option');
+    opt.value = code;
+    opt.textContent = L.name + ' (' + L.native + ')';
+    sel.appendChild(opt);
+  });
+  sel.value = currentLang;
+  sel.onchange = async () => {
+    applyLanguage(sel.value);
+    await post('/api/language', { lang: sel.value });
+  };
+}
+
 function calcTxTime(msg,wpm){const dit=1200/wpm;let ms=0,i=0;while(i<msg.length){const c=msg[i].toUpperCase();if(c==='<'){const cl=msg.indexOf('>',i);if(cl>i+1&&cl<=i+4){const tag=msg.substring(i+1,cl).toUpperCase(),code=PROSIGNS[tag];if(code){for(const s of code)ms+=(s==='.'?dit:3*dit)+dit;ms+=2*dit;i=cl+1;continue;}}}if(c===' '){ms+=7*dit;i++;continue;}const code=MORSE[c];if(code){for(const s of code)ms+=(s==='.'?dit:3*dit)+dit;ms+=2*dit;}i++;}const secs=Math.ceil(ms/1000),mm=String(Math.floor(secs/60)).padStart(2,'0'),ss=String(secs%60).padStart(2,'0');return mm+':'+ss;}
 const ui = {
   modes: document.querySelectorAll('#modeGroup button'),
@@ -658,6 +920,8 @@ function hslToRgb(h,s,l){s/=100;l/=100;const k=n=>(n+h/30)%12;const a=s*Math.min
 function drawWheel(){const c=ui.wheelCanvas,ctx=c.getContext('2d'),cx=c.width/2,cy=c.height/2,r=cx-2;for(let a=0;a<360;a++){ctx.beginPath();ctx.moveTo(cx,cy);ctx.arc(cx,cy,r,a*Math.PI/180,(a+2)*Math.PI/180);ctx.closePath();ctx.fillStyle='hsl('+a+',100%,50%)';ctx.fill();}}
 function pickFromWheel(e){const c=ui.wheelCanvas,rect=c.getBoundingClientRect(),x=e.clientX-rect.left-c.width/2,y=e.clientY-rect.top-c.height/2,d=Math.sqrt(x*x+y*y);if(d>c.width/2)return null;let a=Math.atan2(y,x)*180/Math.PI;if(a<0)a+=360;return Math.round(a);}
 
+let langInitDone = false;
+
 async function getState() {
   try {
     const r = await fetch('/api/state');
@@ -682,8 +946,24 @@ async function getState() {
     ui.pickerWrap.classList.toggle('visible', s.color === 'CUSTOM');
 
     if (s.text && !msgDirty) ui.msg.value = s.text;
-    ui.status.textContent = s.playing ? 'Playing…' : 'Idle';
-    if (s.version) ui.version.textContent = 'Firmware v' + s.version;
+
+    // Apply language from server
+    if (!langInitDone && s.lang) {
+      langInitDone = true;
+      applyLanguage(s.lang);
+      buildLangGrid();
+      buildLangSelect();
+
+      // Show language selection modal on first boot
+      if (s.firstBoot) {
+        const langModal = document.getElementById('langModal');
+        if (langModal) langModal.classList.add('visible');
+      }
+    }
+
+    const L = LANG[currentLang];
+    ui.status.textContent = s.playing ? L.playing : L.idle;
+    if (s.version) ui.version.textContent = L.firmware + ' v' + s.version;
     updateTxTime();
 
     const visMode = s.mode === 1;
@@ -731,8 +1011,18 @@ ui.wpm.addEventListener('change', async ()=>{
 
 ui.msg.addEventListener('input', ()=>{ msgDirty=true; updateTxTime(); });
 
-ui.play.addEventListener('click', async ()=>{ const wpm=parseInt(ui.wpm.value)||10; ui.txTime.textContent='\u23F1 '+calcTxTime(ui.msg.value||'',wpm); await post('/api/play', { text: ui.msg.value || '' }); msgDirty=false; ui.status.textContent = 'Playing…'; });
-ui.stop.addEventListener('click', async ()=>{ await post('/api/stop'); ui.status.textContent = 'Idle'; });
+ui.play.addEventListener('click', async ()=>{ const wpm=parseInt(ui.wpm.value)||10; ui.txTime.textContent='\u23F1 '+calcTxTime(ui.msg.value||'',wpm); await post('/api/play', { text: ui.msg.value || '' }); msgDirty=false; ui.status.textContent = LANG[currentLang].playing; });
+ui.stop.addEventListener('click', async ()=>{ await post('/api/stop'); ui.status.textContent = LANG[currentLang].idle; });
+
+// Language modal confirm
+document.getElementById('langConfirm').addEventListener('click', async () => {
+  const selected = document.querySelector('#langGrid .lang-btn.selected');
+  if (!selected) return;
+  const code = selected.dataset.lang;
+  applyLanguage(code);
+  await post('/api/language', { lang: code });
+  document.getElementById('langModal').classList.remove('visible');
+});
 
 function setupSplash(){
   const splash = document.getElementById('splash');
@@ -792,17 +1082,19 @@ const otaStatus = document.getElementById('otaStatus');
 const otaClose = document.getElementById('otaClose');
 
 document.getElementById('settingsBtn').addEventListener('click', () => {
+  const L = LANG[currentLang];
   if (isAndroidCaptive) {
     androidDialog.classList.add('visible');
     document.getElementById('copyStatus').textContent = '';
   } else {
     otaModal.classList.add('visible');
-    otaVersion.textContent = ui.version.textContent.replace('Firmware v', '') || '-';
+    otaVersion.textContent = ui.version.textContent.replace(L.firmware + ' v', '') || '-';
     otaStatus.textContent = '';
     otaProgress.style.display = 'none';
     otaProgress.value = 0;
-    otaFileName.textContent = 'No file selected';
+    otaFileName.textContent = L.noFile;
     otaFileName.style.color = '#888';
+    buildLangSelect();
   }
 });
 
@@ -816,6 +1108,7 @@ document.getElementById('androidClose').addEventListener('click', () => {
 });
 
 document.getElementById('copyLinkBtn').addEventListener('click', () => {
+  const L = LANG[currentLang];
   const url = 'http://192.168.4.1';
   const status = document.getElementById('copyStatus');
 
@@ -829,10 +1122,10 @@ document.getElementById('copyLinkBtn').addEventListener('click', () => {
 
   try {
     document.execCommand('copy');
-    status.textContent = 'Copied! Open Chrome and paste.';
+    status.textContent = L.copied;
     status.style.color = '#4CAF50';
   } catch (e) {
-    status.textContent = 'Copy failed. Type: 192.168.4.1';
+    status.textContent = L.copyFailed;
     status.style.color = '#ff9800';
   }
 
@@ -844,10 +1137,11 @@ otaModal.addEventListener('click', (e) => {
 });
 
 otaFile.addEventListener('change', () => {
+  const L = LANG[currentLang];
   if (otaFile.files.length > 0) {
     const name = otaFile.files[0].name;
     if (!name.toLowerCase().endsWith('.bin')) {
-      otaFileName.textContent = 'Error: Select a .bin file';
+      otaFileName.textContent = L.errBin;
       otaFileName.style.color = '#f44336';
       otaFile.value = '';
       return;
@@ -855,22 +1149,23 @@ otaFile.addEventListener('change', () => {
     otaFileName.textContent = name;
     otaFileName.style.color = '#8AB4F8';
   } else {
-    otaFileName.textContent = 'No file selected';
+    otaFileName.textContent = L.noFile;
     otaFileName.style.color = '#888';
   }
 });
 
 otaUpload.addEventListener('click', async () => {
+  const L = LANG[currentLang];
   const file = otaFile.files[0];
 
   if (!file) {
-    otaStatus.textContent = 'Select a .bin file';
+    otaStatus.textContent = L.selectBin;
     otaStatus.style.color = '#ff9800';
     return;
   }
 
   otaUpload.disabled = true;
-  otaStatus.textContent = 'Uploading...';
+  otaStatus.textContent = L.uploading;
   otaStatus.style.color = '#8AB4F8';
   otaProgress.style.display = 'block';
   otaProgress.value = 0;
@@ -888,12 +1183,12 @@ otaUpload.addEventListener('click', async () => {
 
   xhr.addEventListener('load', () => {
     if (xhr.status === 200) {
-      otaStatus.textContent = 'Success! Rebooting...';
+      otaStatus.textContent = L.success;
       otaStatus.style.color = '#4CAF50';
       setTimeout(() => location.reload(), 5000);
     } else {
       // Parse error message from response if available
-      let msg = 'Update failed';
+      let msg = L.updateFailed;
       try {
         const resp = JSON.parse(xhr.responseText);
         if (resp.error) msg = resp.error;
@@ -905,7 +1200,7 @@ otaUpload.addEventListener('click', async () => {
   });
 
   xhr.addEventListener('error', () => {
-    otaStatus.textContent = 'Network error';
+    otaStatus.textContent = L.netError;
     otaStatus.style.color = '#f44336';
     otaUpload.disabled = false;
   });
@@ -937,11 +1232,14 @@ th{background:#222;color:#888;font-weight:600}
 .dot{color:#8AB4F8}
 .dash{color:#8AB4F8}
 .gap{color:#666}
+[dir="rtl"]{direction:rtl}
+[dir="rtl"] td,[dir="rtl"] th{text-align:right}
+[dir="rtl"] .code{text-align:left;direction:ltr}
 </style>
 </head>
 <body>
-<a href="/" class="back">← Back to Control</a>
-<h1>Morse Code Reference</h1>
+<a href="/" class="back" id="backLink">\u2190 Back to Control</a>
+<h1 id="helpTitle">Morse Code Reference</h1>
 
 <h2>Letters</h2>
 <table>
@@ -995,6 +1293,29 @@ th{background:#222;color:#888;font-weight:600}
 At 10 WPM: 1 unit = 120ms
 </div>
 
+<script>
+const HELP_LANG = {
+  en: { back:'\u2190 Back to Control', title:'Morse Code Reference' },
+  es: { back:'\u2190 Volver al Control', title:'Referencia de C\u00F3digo Morse' },
+  fr: { back:'\u2190 Retour au Contr\u00F4le', title:'R\u00E9f\u00E9rence Code Morse' },
+  ru: { back:'\u2190 \u041D\u0430\u0437\u0430\u0434', title:'\u0421\u043F\u0440\u0430\u0432\u043E\u0447\u043D\u0438\u043A \u041C\u043E\u0440\u0437\u0435' },
+  'zh-CN': { back:'\u2190 \u8FD4\u56DE\u63A7\u5236', title:'\u6469\u5C14\u65AF\u7535\u7801\u53C2\u8003' },
+  'zh-TW': { back:'\u2190 \u8FD4\u56DE\u63A7\u5236', title:'\u6469\u723E\u65AF\u96FB\u78BC\u53C3\u8003' },
+  fa: { back:'\u2192 \u0628\u0627\u0632\u06AF\u0634\u062A', title:'\u0645\u0631\u062C\u0639 \u06A9\u062F \u0645\u0648\u0631\u0633' },
+  ar: { back:'\u2192 \u0639\u0648\u062F\u0629', title:'\u0645\u0631\u062C\u0639 \u0634\u0641\u0631\u0629 \u0645\u0648\u0631\u0633' }
+};
+const RTL_LANGS = ['fa','ar'];
+try {
+  const lang = localStorage.getItem('signet_lang') || 'en';
+  const L = HELP_LANG[lang] || HELP_LANG.en;
+  document.getElementById('backLink').textContent = L.back;
+  document.getElementById('helpTitle').textContent = L.title;
+  if (RTL_LANGS.includes(lang)) {
+    document.documentElement.dir = 'rtl';
+    document.documentElement.lang = lang;
+  }
+} catch(e){}
+</script>
 </body></html>
 )====";
 
@@ -1073,7 +1394,7 @@ void sendHelpPage(){
 void handleState(){
   if (captivePortal()) return;
   noteActivity();
-  StaticJsonDocument<384> doc;
+  StaticJsonDocument<512> doc;
   doc["mode"]     = (int)state.mode;
   doc["intensity"]= intensityToStr(state.intensity);
   doc["color"]    = colorToStr(state.color);
@@ -1086,6 +1407,9 @@ void handleState(){
   doc["text"]     = getTextCopy();
   doc["playing"]  = state.playing;
   doc["version"]  = FIRMWARE_VERSION;
+  // Language info for UI localization
+  doc["lang"]     = LANG_CODES[state.language];
+  doc["firstBoot"]= !languageSet;
   String out; serializeJson(doc, out);
   server.send(200, "application/json", out);
 }
@@ -1142,6 +1466,49 @@ void handleStop(){
   state.playing = false;
   allOff();
   server.send(200, "application/json", "{\"playing\":false}");
+}
+
+// -------------------- Language Selection --------------------
+void handleLanguageSet(){
+  noteActivity();
+  StaticJsonDocument<128> doc;
+  auto err = deserializeJson(doc, server.arg("plain"));
+  if (err) {
+    server.send(400, "application/json", "{\"error\":\"invalid JSON\"}");
+    return;
+  }
+
+  if (!doc.containsKey("lang")) {
+    server.send(400, "application/json", "{\"error\":\"missing lang field\"}");
+    return;
+  }
+
+  String langCode = doc["lang"].as<String>();
+
+  // Find language code index
+  int langIndex = -1;
+  for (uint8_t i = 0; i < LANG_COUNT; i++) {
+    if (langCode == LANG_CODES[i]) {
+      langIndex = i;
+      break;
+    }
+  }
+
+  if (langIndex < 0) {
+    server.send(400, "application/json", "{\"error\":\"invalid language code\"}");
+    return;
+  }
+
+  // Update state and persist to NVS
+  state.language = (uint8_t)langIndex;
+  languageSet = true;
+
+  prefs.putUChar("lang", state.language);
+  prefs.putBool("langSet", true);
+
+  Serial.printf("Language changed to: %s\n", LANG_CODES[state.language]);
+
+  server.send(200, "application/json", "{\"ok\":true}");
 }
 
 // -------------------- OTA Firmware Update --------------------
@@ -1378,6 +1745,12 @@ void setup(){
     Serial.println("WARNING: LittleFS mount failed - splash image unavailable");
   }
 
+  // Initialize Preferences (NVS) for persistent language storage
+  prefs.begin("signet", false);  // Namespace "signet", read-write mode
+  state.language = prefs.getUChar("lang", LANG_EN);
+  languageSet = prefs.getBool("langSet", false);
+  Serial.printf("Language: %s (set=%s)\n", LANG_CODES[state.language], languageSet ? "true" : "false");
+
   // Create mutex for thread-safe text access
   textMutex = xSemaphoreCreateMutex();
   if (!textMutex) {
@@ -1415,9 +1788,10 @@ void setup(){
   server.on("/help",       HTTP_GET,  sendHelpPage);
   server.on("/api/state",  HTTP_GET,  handleState);
   server.on("/api/update", HTTP_POST, handleUpdate);
-  server.on("/api/play",   HTTP_POST, handlePlay);
-  server.on("/api/stop",   HTTP_POST, handleStop);
-  server.on("/api/ota",    HTTP_POST, handleOtaComplete, handleOtaUpload);
+  server.on("/api/play",     HTTP_POST, handlePlay);
+  server.on("/api/stop",     HTTP_POST, handleStop);
+  server.on("/api/language", HTTP_POST, handleLanguageSet);
+  server.on("/api/ota",      HTTP_POST, handleOtaComplete, handleOtaUpload);
 
   // Serve splash image from LittleFS as /bb.jpg
   server.on("/bb.jpg", HTTP_GET, [](){
