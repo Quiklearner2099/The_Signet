@@ -42,18 +42,22 @@
 
 ## Feature Breakdown
 
+<div align="center">
+
 | 🔩 Hardware | 💾 Firmware |
 |:---|:---|
 | **XIAO ESP32-C6 SoC** — cheap, small, capable | **Plain text → International Morse code** signaling |
-| **Dual emitters** — RGB LED + 850nm IR LED | **Language agnostic** — enc/decodes the same worldwide |
+| **Dual emitters** — RGB LED + 950nm IR LED | **Language agnostic** — enc/decodes the same worldwide |
 | **500 mAh Li-Po** with dis/charge protection | **Visible / Discreet modes** — selectable RGB / IR output |
 | **USB-C charging** — can be used while charging | **WiFi AP+CP** — browser-based UI; no app required |
 | **Magnetic mounting** — for fast, easy placement | **No internet connectivity** — operates fully offline |
 | **Easy assembly and quick builds** | **Auto WiFi shutdown** after 90 seconds of UI inactivity |
 | **Snap-fit 3D-printable enclosure** (2 pieces) | **OTA firmware updates** — upload new firmware via the captive portal |
 | **Minimal soldering required** | **"Stateless by Power" design** — no messages stored |
- 
+
 **NO telemetry, NO accounts, NO bullshyte**
+
+</div>
 
 <hr/>
 
@@ -88,9 +92,9 @@
 
 <hr/>
 
-<h2>Why this exists</h2>
+<h2>:question:Why this exists</h2>
 
-<h3>📣 Durable speech when platforms fail</h3>
+<h3>:loudspeaker:Durable speech when platforms fail</h3>
 
 <p>
   In many places, digital censorship and content suppression are rising.
@@ -113,7 +117,7 @@
   </strong>
 </blockquote>
 
-<h3>🧾 Footage continuity &amp; tamper indication</h3>
+<h3>:video_camera:Footage continuity &amp; tamper indication</h3>
 
 <p>
   <strong>The Signet</strong> can also be used as a continuity marker for recorded footage.
@@ -134,7 +138,7 @@
 
 <hr/>
 
-<h2>How this differs from watermarking</h2>
+<h2>:thinking:How this differs from watermarking</h2>
 
 <p>
   While <strong>The Signet</strong> and watermarking both involve embedding information into video,
@@ -168,7 +172,7 @@
 
 <hr/>
 
-<h2>Privacy &amp; Security by Design</h2>
+<h2>:closed_lock_with_key:Privacy &amp; Security by Design</h2>
 
 <ul>
   <li><strong>No app required</strong> — browser-based configuration only</li>
@@ -182,9 +186,9 @@
 
 <hr/>
 
-## Development Setup
+## :desktop_computer:Development Setup
 
-### Quick Start with GitHub Codespaces
+### Quick Start with GitHub Codespaces ⭐ RECOMMENDED
 
 The easiest way to contribute is to use GitHub Codespaces - a cloud-based development environment with everything pre-configured:
 
