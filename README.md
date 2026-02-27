@@ -10,7 +10,6 @@
 
 [![Steganography](https://img.shields.io/badge/Steganography-Morse%20Code-purple.svg)]()
 [![Free Speech](https://img.shields.io/badge/Free%20Speech-Tool-1DA1F2.svg)]()
-![Visitor Badge](https://visitor-badge.laobi.icu/badge?page_id=Quiklearner2099.The_Signet)
 
 <h1>BIG BROTHER IS WATCHING YOU…<br/>Send him a message.</h1>
 
