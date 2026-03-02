@@ -1,8 +1,8 @@
 /*
   ===================================================================================
   The Signet Morse Beacon
-  Version: 1.3.0
-  Release Date: March 1, 2026
+  Version: 1.2.1
+  Release Date: February 26, 2026
   ===================================================================================
 
   DESCRIPTION:
@@ -42,12 +42,6 @@
   ===================================================================================
   VERSION HISTORY:
   ===================================================================================
-  v1.3.0 (March 1, 2026) - Security hardening: Single WiFi connection limit prevents
-                              unauthorized access to OTA endpoint. Added firmware header
-                              validation (magic byte check). Input validation improvements
-                              for language index, WPM, and RGB values. Payload size limits
-                              on API endpoints (defense-in-depth). Task watchdog timer (30s)
-                              for resilience against hangs.
   v1.2.1 (February 26, 2026) - Added UI language options for UI. English (default), French,
                               Spanish, Russian, Traditional Chinese, Simplified Chinese, Arabic and Farsi.
                               *** ITU Morse code is still implemented ***
@@ -71,7 +65,7 @@
   v1.0.3 (January 19, 2026) - Blue pulsing LED indicates WiFi AP ready, 4 rapid blinks
                               confirm Web UI connection, custom color wheel picker,
                               hardware PWM for IR LED (improved power efficiency)
-  v1.0.2 (January 3, 2026) - Compact mobile-friendly UI
+  v1.0.2 (January 3, 2026)  - Compact mobile-friendly UI
   v1.0.1 (January 2, 2026) - Added adjustable Morse speed (WPM)
   v1.0.0 (January 1, 2026) - Initial Stable Release
 
@@ -98,16 +92,10 @@
 #include <Update.h>       // OTA firmware updates
 #include "esp_ota_ops.h"  // OTA boot validation
 #include <Preferences.h>  // Persistent language storage (NVS)
-#include <atomic>         // Thread-safe atomic types
-#include "esp_task_wdt.h" // Task watchdog timer
-
-// Increase main loop task stack size from 8KB to 32KB
-// Required for WebServer handling multiple captive portal requests (especially Android)
-SET_LOOP_TASK_STACK_SIZE(32 * 1024);
 
 // -------------------- Version Information --------------------
-#define FIRMWARE_VERSION "1.3.0"
-#define FIRMWARE_DATE    "March 1, 2026"
+#define FIRMWARE_VERSION "1.2.1"
+#define FIRMWARE_DATE    "February 26, 2026"
 
 // -------------------- Forward Declarations --------------------
 enum Mode     { DISCREET = 0, VISIBLE = 1 };
@@ -182,7 +170,6 @@ IPAddress apGateway(192,168,4,1);
 IPAddress apSubnet(255,255,255,0);
 
 String apSsid;  // must persist (global) so c_str() stays valid
-String portalRedirectUrl;  // Pre-computed redirect URL to reduce heap pressure in handlers
 
 static String buildApSsidWithMacTail() {
   uint8_t mac[6] = {0};
@@ -199,7 +186,7 @@ static String buildApSsidWithMacTail() {
 }
 
 // -------------------- WiFi Idle timeout logic --------------------
-const unsigned long AP_IDLE_TIMEOUT_MS = 60000; // 60 seconds (privacy: minimize SSID exposure)
+const unsigned long AP_IDLE_TIMEOUT_MS = 90000; // 90 seconds
 unsigned long lastActivityMs = 0;
 bool apRunning = false;
 
@@ -265,7 +252,7 @@ struct AppState {
   volatile uint8_t customB = 255;  // Default: magenta
   volatile uint8_t language = LANG_EN;  // UI language (persistent via NVS)
   String text = "SOS";
-  std::atomic<bool> playing{false};  // Thread-safe playback state
+  volatile bool playing = false;
 } state;
 
 String getTextCopy() {
@@ -319,7 +306,7 @@ CRGB colorValue(ColorSel c) {
 // Standard "PARIS" timing: dit duration = 1200 / WPM (in ms)
 // All other timings are multiples of the dit duration
 
-uint32_t ditDuration()  { uint8_t wpm = state.wpm; return 1200 / (wpm > 0 ? wpm : 1); }  // Guard against div-by-zero
+uint32_t ditDuration()  { return 1200 / state.wpm; }
 uint32_t dahDuration()  { return 3 * ditDuration(); }
 uint32_t gapIntra()     { return ditDuration(); }         // Between dits/dahs in same letter
 uint32_t gapLetter()    { return 3 * ditDuration(); }     // Between letters
@@ -531,13 +518,11 @@ input:checked + .slider:before{transform:translateX(20px);background:#111}
 .msg-hint{font-size:13px;color:#FFD700;margin:6px 0;text-align:center}
 .msg-header{display:flex;align-items:baseline}
 .max-hint{font-size:10px;color:#666;font-weight:400;margin-left:6px}
-.tx-time{margin-left:auto;font-size:14px;color:#8AB4F8;font-weight:400}
+.tx-time{margin-left:auto;font-size:11px;color:#8AB4F8;font-weight:400}
 .btn-row{display:flex;gap:8px;margin-top:8px}
 .btn-row button{flex:1;border:0;border-radius:10px;padding:10px;font-weight:700;font-size:13px;cursor:pointer}
-.btn-row .play{background:#333;color:#fff;border:1px solid #333}
-.btn-row .play.active{background:var(--primary);color:#000;border-color:var(--primary)}
+.btn-row .play{background:var(--primary);color:#000}
 .btn-row .stop{background:transparent;color:#fff;border:1px solid #333}
-.btn-row .stop.active{background:var(--primary);color:#000;border-color:var(--primary)}
 .status{text-align:center;font-size:11px;color:#666;margin-top:6px}
 .footer{display:flex;align-items:center;justify-content:center;font-size:14px;color:#FFD700;font-weight:700;margin-top:10px}
 .footer-text{margin:0 8px}
@@ -896,13 +881,8 @@ function buildLangSelect() {
   });
   sel.value = currentLang;
   sel.onchange = async () => {
-    const prev = currentLang;
-    const result = await post('/api/language', { lang: sel.value });
-    if (result && result.ok) {
-      applyLanguage(sel.value);
-    } else {
-      sel.value = prev;  // Revert dropdown on failure
-    }
+    applyLanguage(sel.value);
+    await post('/api/language', { lang: sel.value });
   };
 }
 
@@ -983,8 +963,6 @@ async function getState() {
 
     const L = LANG[currentLang];
     ui.status.textContent = s.playing ? L.playing : L.idle;
-    ui.play.classList.toggle('active', s.playing);
-    ui.stop.classList.toggle('active', !s.playing);
     if (s.version) ui.version.textContent = L.firmware + ' v' + s.version;
     updateTxTime();
 
@@ -1033,8 +1011,8 @@ ui.wpm.addEventListener('change', async ()=>{
 
 ui.msg.addEventListener('input', ()=>{ msgDirty=true; updateTxTime(); });
 
-ui.play.addEventListener('click', async ()=>{ const wpm=parseInt(ui.wpm.value)||10; ui.txTime.textContent='\u23F1 '+calcTxTime(ui.msg.value||'',wpm); await post('/api/play', { text: ui.msg.value || '' }); msgDirty=false; ui.status.textContent = LANG[currentLang].playing; ui.play.classList.add('active'); ui.stop.classList.remove('active'); });
-ui.stop.addEventListener('click', async ()=>{ await post('/api/stop'); ui.status.textContent = LANG[currentLang].idle; ui.stop.classList.add('active'); ui.play.classList.remove('active'); });
+ui.play.addEventListener('click', async ()=>{ const wpm=parseInt(ui.wpm.value)||10; ui.txTime.textContent='\u23F1 '+calcTxTime(ui.msg.value||'',wpm); await post('/api/play', { text: ui.msg.value || '' }); msgDirty=false; ui.status.textContent = LANG[currentLang].playing; });
+ui.stop.addEventListener('click', async ()=>{ await post('/api/stop'); ui.status.textContent = LANG[currentLang].idle; });
 
 // Language modal confirm
 document.getElementById('langConfirm').addEventListener('click', async () => {
@@ -1342,43 +1320,12 @@ try {
 )====";
 
 // -------------------- Captive Portal helpers --------------
-// Validates that a string is a properly formatted IPv4 address (e.g., "192.168.4.1")
-// Rejects: empty strings, wrong octet counts, values > 255, leading zeros, non-numeric chars
-bool isIpAddress(const String& str) {
-  if (str.length() == 0 || str.length() > 15) return false;
-
-  int dots = 0;
-  size_t octetStart = 0;
-
-  for (size_t i = 0; i <= str.length(); i++) {
-    if (i == str.length() || str[i] == '.') {
-      // Check for empty octet (consecutive dots or leading/trailing dot)
-      if (i == octetStart) return false;
-
-      // Extract and validate octet
-      size_t octetLen = i - octetStart;
-      if (octetLen > 3) return false;
-
-      // Parse octet value
-      int val = 0;
-      for (size_t j = octetStart; j < i; j++) {
-        val = val * 10 + (str[j] - '0');
-      }
-      if (val > 255) return false;
-
-      // Reject leading zeros (e.g., "01", "001") except for "0" itself
-      if (octetLen > 1 && str[octetStart] == '0') return false;
-
-      octetStart = i + 1;
-      if (i < str.length()) dots++;
-    } else if (str[i] < '0' || str[i] > '9') {
-      // Non-numeric character
-      return false;
-    }
+bool isIpAddress(String str) {
+  for (size_t i=0; i<str.length(); i++) {
+    char c = str[i];
+    if ((c != '.') && (c < '0' || c > '9')) return false;
   }
-
-  // Must have exactly 3 dots (4 octets)
-  return dots == 3;
+  return true;
 }
 
 bool captivePortal() {
@@ -1458,7 +1405,7 @@ void handleState(){
   doc["wpm"]      = state.wpm;
   // FIX: Thread-safe access to text
   doc["text"]     = getTextCopy();
-  doc["playing"]  = state.playing.load();  // Explicit load for ArduinoJson compatibility
+  doc["playing"]  = state.playing;
   doc["version"]  = FIRMWARE_VERSION;
   // Language info for UI localization
   doc["lang"]     = LANG_CODES[state.language];
@@ -1469,11 +1416,6 @@ void handleState(){
 
 void handleUpdate(){
   noteActivity();
-  // Payload size limit (defense-in-depth against malformed input)
-  if (server.arg("plain").length() > 512) {
-    server.send(413, "application/json", "{\"error\":\"payload too large\"}");
-    return;
-  }
   StaticJsonDocument<256> doc;
   auto err = deserializeJson(doc, server.arg("plain"));
   if (err) {
@@ -1489,9 +1431,9 @@ void handleUpdate(){
     state.intensity = strToIntensity(doc["intensity"].as<String>());
   }
   if (doc.containsKey("color"))     state.color     = strToColor(doc["color"].as<String>());
-  if (doc.containsKey("customR"))   state.customR   = (uint8_t)constrain(doc["customR"].as<int>(), 0, 255);
-  if (doc.containsKey("customG"))   state.customG   = (uint8_t)constrain(doc["customG"].as<int>(), 0, 255);
-  if (doc.containsKey("customB"))   state.customB   = (uint8_t)constrain(doc["customB"].as<int>(), 0, 255);
+  if (doc.containsKey("customR"))   state.customR   = (uint8_t)doc["customR"].as<int>();
+  if (doc.containsKey("customG"))   state.customG   = (uint8_t)doc["customG"].as<int>();
+  if (doc.containsKey("customB"))   state.customB   = (uint8_t)doc["customB"].as<int>();
   if (doc.containsKey("dazzle"))    state.dazzle    = doc["dazzle"].as<bool>();
   if (doc.containsKey("wpm")) {
     int newWpm = doc["wpm"].as<int>();
@@ -1504,11 +1446,6 @@ void handleUpdate(){
 
 void handlePlay(){
   noteActivity();
-  // Payload size limit (defense-in-depth against malformed input)
-  if (server.arg("plain").length() > 512) {
-    server.send(413, "application/json", "{\"error\":\"payload too large\"}");
-    return;
-  }
   StaticJsonDocument<256> doc;
   auto err = deserializeJson(doc, server.arg("plain"));
   if (!err && doc.containsKey("text")) {
@@ -1534,11 +1471,6 @@ void handleStop(){
 // -------------------- Language Selection --------------------
 void handleLanguageSet(){
   noteActivity();
-  // Payload size limit (defense-in-depth against malformed input)
-  if (server.arg("plain").length() > 256) {
-    server.send(413, "application/json", "{\"error\":\"payload too large\"}");
-    return;
-  }
   StaticJsonDocument<128> doc;
   auto err = deserializeJson(doc, server.arg("plain"));
   if (err) {
@@ -1584,9 +1516,6 @@ void handleLanguageSet(){
 static SemaphoreHandle_t otaMutex = nullptr;
 static bool otaInProgress = false;
 static bool otaHadError = false;
-static bool otaHeaderChecked = false;  // For firmware magic byte validation
-static size_t otaExpectedSize = 0;     // Content-Length from header
-static size_t otaReceivedSize = 0;     // Actual bytes received
 static String otaErrorMessage = "";
 
 // Max firmware size (from partition table: 0x140000 = 1,310,720 bytes)
@@ -1609,7 +1538,6 @@ void handleOtaUpload() {
 
     // Reset error state for new upload
     otaHadError = false;
-    otaHeaderChecked = false;
     otaErrorMessage = "";
 
     // Firmware size pre-check
@@ -1637,26 +1565,10 @@ void handleOtaUpload() {
     }
 
     otaInProgress = true;
-    otaExpectedSize = contentLength;
-    otaReceivedSize = 0;
   }
   else if (upload.status == UPLOAD_FILE_WRITE) {
     // Only process if we have an active update
     if (!otaInProgress) return;
-
-    // Validate firmware magic byte on first chunk (ESP32 firmware starts with 0xE9)
-    if (!otaHeaderChecked && upload.currentSize > 0) {
-      otaHeaderChecked = true;
-      if (upload.buf[0] != 0xE9) {
-        otaHadError = true;
-        otaErrorMessage = "Invalid firmware format";
-        Serial.println("[OTA] Rejected: invalid firmware header (not 0xE9)");
-        Update.abort();
-        otaInProgress = false;
-        if (otaMutex) xSemaphoreGive(otaMutex);
-        return;
-      }
-    }
 
     if (Update.write(upload.buf, upload.currentSize) != upload.currentSize) {
       otaHadError = true;
@@ -1665,8 +1577,6 @@ void handleOtaUpload() {
       Update.abort();
       otaInProgress = false;
       if (otaMutex) xSemaphoreGive(otaMutex);
-    } else {
-      otaReceivedSize += upload.currentSize;  // Track bytes received
     }
   }
   else if (upload.status == UPLOAD_FILE_END) {
@@ -1678,10 +1588,6 @@ void handleOtaUpload() {
 
     if (Update.end(true)) {
       Serial.printf("[OTA] Success: %u bytes written\n", upload.totalSize);
-      // Warn if received size doesn't match Content-Length header
-      if (otaExpectedSize > 0 && otaReceivedSize != otaExpectedSize) {
-        Serial.printf("[OTA] Warning: expected %u bytes, received %u\n", otaExpectedSize, otaReceivedSize);
-      }
     } else {
       otaHadError = true;
       otaErrorMessage = "Update finalization failed";
@@ -1801,17 +1707,17 @@ void connectionConfirmBlink() {
 // -------------------- Setup / Loop -----------------------
 void setup(){
   delay(100);
-  //Serial.begin(115200);
+  Serial.begin(115200);
   
   // Print startup banner
-  //Serial.println();
-  //Serial.println("===========================================");
-  //Serial.println("  The Signet Morse Beacon");
-  //Serial.printf("  Firmware Version: %s\n", FIRMWARE_VERSION);
-  //Serial.printf("  Build Date: %s\n", FIRMWARE_DATE);
-  //Serial.println("  (c) 2025 Cunths & Queeths LLC");
-  //Serial.println("===========================================");
-  //Serial.println();
+  Serial.println();
+  Serial.println("===========================================");
+  Serial.println("  The Signet Morse Beacon");
+  Serial.printf("  Firmware Version: %s\n", FIRMWARE_VERSION);
+  Serial.printf("  Build Date: %s\n", FIRMWARE_DATE);
+  Serial.println("  (c) 2025 Cunths & Queeths LLC");
+  Serial.println("===========================================");
+  Serial.println();
 
   // Sleep switch first
   pinMode(PIN_SLEEP_SW, INPUT_PULLUP);
@@ -1841,39 +1747,29 @@ void setup(){
 
   // Initialize Preferences (NVS) for persistent language storage
   prefs.begin("signet", false);  // Namespace "signet", read-write mode
-  uint8_t savedLang = prefs.getUChar("lang", LANG_EN);
-  state.language = (savedLang < LANG_COUNT) ? savedLang : LANG_EN;  // Bounds check
+  state.language = prefs.getUChar("lang", LANG_EN);
   languageSet = prefs.getBool("langSet", false);
   Serial.printf("Language: %s (set=%s)\n", LANG_CODES[state.language], languageSet ? "true" : "false");
 
   // Create mutex for thread-safe text access
   textMutex = xSemaphoreCreateMutex();
   if (!textMutex) {
-    Serial.println("FATAL: Failed to create text mutex - halting");
-    while (true) { delay(1000); }  // Halt - don't run without mutex
+    Serial.println("WARNING: Failed to create text mutex");
   }
 
   // Create mutex for OTA upload synchronization
   otaMutex = xSemaphoreCreateMutex();
   if (!otaMutex) {
-    Serial.println("FATAL: Failed to create OTA mutex - halting");
-    while (true) { delay(1000); }  // Halt - don't run without mutex
+    Serial.println("WARNING: Failed to create OTA mutex");
   }
 
+
   // Wi-Fi AP + captive DNS
-  // Single connection limit: first client gets exclusive access (OTA security)
   WiFi.mode(WIFI_AP);
 
   apSsid = buildApSsidWithMacTail();
   WiFi.softAPConfig(apIP, apGateway, apSubnet);
-
-  // Select random non-overlapping WiFi channel (1, 6, or 11) to reduce interference
-  const uint8_t channels[] = {1, 6, 11};
-  uint8_t apChannel = channels[esp_random() % 3];
-  WiFi.softAP(apSsid.c_str(), AP_PASS, apChannel, 0, 1);  // hidden=0, max_conn=1
-
-  // Pre-compute redirect URL once (reduces heap pressure in request handlers)
-  portalRedirectUrl = String("http://") + apIP.toString() + "/";
+  WiFi.softAP(apSsid.c_str(), AP_PASS);
 
   // Debug
   uint8_t mac[6];
@@ -1881,7 +1777,6 @@ void setup(){
   Serial.printf("STA MAC: %02X:%02X:%02X:%02X:%02X:%02X\n", mac[0],mac[1],mac[2],mac[3],mac[4],mac[5]);
   Serial.print("AP SSID: "); Serial.println(apSsid);
   Serial.print("AP IP: ");   Serial.println(WiFi.softAPIP());
-  Serial.printf("AP Channel: %d\n", apChannel);
 
   dnsServer.start(53, "*", apIP);
 
@@ -1920,67 +1815,6 @@ void setup(){
     f.close();
   });
 
-  // ---- OS-Specific Captive Portal Detection Handlers ----
-  // These endpoints are probed by various operating systems to detect captive portals.
-  // IMPORTANT: HTTP 302 redirect triggers the popup. HTTP 204 tells the OS "internet works" and PREVENTS the popup.
-
-  // Android / Chrome: Probes /generate_204 expecting HTTP 204 if internet works.
-  // Returning 302 redirect instead triggers the "Sign in to network" popup.
-  server.on("/generate_204", HTTP_GET, [](){
-    noteActivity();
-    server.sendHeader("Location", portalRedirectUrl, true);
-    server.send(302, "text/plain", "");
-  });
-  server.on("/gen_204", HTTP_GET, [](){
-    noteActivity();
-    server.sendHeader("Location", portalRedirectUrl, true);
-    server.send(302, "text/plain", "");
-  });
-
-  // iOS / macOS: Probes /hotspot-detect.html, redirect triggers popup
-  server.on("/hotspot-detect.html", HTTP_GET, [](){
-    noteActivity();
-    server.sendHeader("Location", portalRedirectUrl, true);
-    server.send(302, "text/plain", "");
-  });
-
-  // Windows 10/11: Probes /connecttest.txt expecting "Microsoft Connect Test" body.
-  // Redirect to http://logout.net (documented workaround that triggers Windows captive portal popup).
-  server.on("/connecttest.txt", HTTP_GET, [](){
-    noteActivity();
-    server.sendHeader("Location", "http://logout.net", true);
-    server.send(302, "text/plain", "");
-  });
-  // Windows follows up by requesting /redirect after detecting captive portal
-  server.on("/redirect", HTTP_GET, [](){
-    noteActivity();
-    server.sendHeader("Location", portalRedirectUrl, true);
-    server.send(302, "text/plain", "");
-  });
-  // Microsoft fwlink endpoint (used for captive portal interactions)
-  server.on("/fwlink", HTTP_GET, [](){
-    noteActivity();
-    server.sendHeader("Location", portalRedirectUrl, true);
-    server.send(302, "text/plain", "");
-  });
-
-  // Firefox: Probes /canonical.html and /success.txt
-  server.on("/canonical.html", HTTP_GET, [](){
-    noteActivity();
-    server.sendHeader("Location", portalRedirectUrl, true);
-    server.send(302, "text/plain", "");
-  });
-  server.on("/success.txt", HTTP_GET, [](){
-    noteActivity();
-    server.sendHeader("Location", portalRedirectUrl, true);
-    server.send(302, "text/plain", "");
-  });
-
-  // Prevent Windows WPAD (Web Proxy Auto-Discovery) repeated requests
-  server.on("/wpad.dat", HTTP_GET, [](){
-    server.send(404, "text/plain", "");
-  });
-
   server.onNotFound(handleNotFound);
   server.begin();
 
@@ -1989,18 +1823,6 @@ void setup(){
 
   // Mark firmware as valid (for OTA rollback protection)
   esp_ota_mark_app_valid_cancel_rollback();
-
-  // Task Watchdog Timer - Configure with 60s timeout for captive portal operations
-  // Android makes multiple rapid requests which can delay loop execution
-  esp_task_wdt_config_t wdt_config = {
-    .timeout_ms = 60000,  // 60 seconds (longer for Android captive portal)
-    .idle_core_mask = 0,
-    .trigger_panic = true
-  };
-  esp_task_wdt_deinit();  // Remove any existing WDT config
-  esp_task_wdt_init(&wdt_config);
-  esp_task_wdt_add(NULL);
-  Serial.println("Watchdog timer enabled (60s timeout)");
 }
 
 void loop(){
@@ -2031,7 +1853,4 @@ void loop(){
       allOff();
     }
   }
-
-  // Feed the watchdog timer (prevents reset during normal operation)
-  esp_task_wdt_reset();
 }
