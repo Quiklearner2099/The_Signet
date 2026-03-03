@@ -19,7 +19,7 @@
   - Adjustable Morse speed (5-20 WPM)
   - 60-second idle WiFi AP timeout to conserve power
   - Help(?) screen with Morse code definitions
-  - OTA Firmware update support with LED combination lock (v1.3.1+)
+  - OTA Firmware update support with LED combination lock (v1.3.0+)
 
   HARDWARE:
   - Seeed Studios XIAO ESP32-C6 Module (other ESP32s can be used)
