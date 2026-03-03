@@ -51,9 +51,9 @@
 | **500 mAh Li-Po** with dis/charge protection | **Visible / Discreet modes** — selectable RGB / IR output |
 | **USB-C charging** — can be used while charging | **WiFi AP+CP** — browser-based UI; no app required |
 | **Magnetic mounting** — for fast, easy placement | **No internet connectivity** — operates fully offline |
-| **Easy assembly and quick builds** | **Auto WiFi shutdown** after 90 seconds of UI inactivity |
+| **Easy assembly and quick builds** | **Auto WiFi shutdown** after 60 seconds of UI inactivity |
 | **Snap-fit 3D-printable enclosure** (2 pieces) | **OTA firmware updates** — upload new firmware via the captive portal |
-| **Minimal soldering required** | **"Stateless by Power" design** — no messages stored |
+| **Minimal soldering required** | **True stateless design** — zero bytes persisted to flash |
 
 **NO telemetry, NO accounts, NO bullshyte**
 
@@ -178,10 +178,12 @@
   <li><strong>No app required</strong> — browser-based configuration only</li>
   <li><strong>No internet connectivity</strong> — never connects to cloud services</li>
   <li><strong>Temporary local Wi-Fi AP</strong> for configuration only</li>
-  <li><strong>Automatic AP shutdown</strong> after 90 seconds of inactivity</li>
+  <li><strong>Automatic AP shutdown</strong> after 60 seconds of inactivity</li>
+  <li><strong>MAC address locking</strong> — first device to connect gets exclusive access; AP shuts down when that device disconnects</li>
   <li><strong>No persistent logs or telemetry</strong></li>
-  <li><strong>Stateless by power design</strong> — power cycling resets to default</li>
+  <li><strong>True stateless design</strong> — zero bytes written to flash; all settings (including language) reset on power cycle</li>
   <li><strong>OTA updates are local-only</strong> — firmware uploaded directly through the on-device Wi-Fi AP; no cloud, no remote access</li>
+  <li><strong>Anti-forensics</strong> — nothing to recover from the device; no message history, no usage patterns</li>
 </ul>
 
 <hr/>

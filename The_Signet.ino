@@ -1,8 +1,8 @@
 /*
   ===================================================================================
   The Signet Morse Beacon
-  Version: 1.2.1
-  Release Date: February 26, 2026
+  Version: 1.3.0
+  Release Date: March 3, 2026
   ===================================================================================
 
   DESCRIPTION:
@@ -17,9 +17,9 @@
   - RGB & IR LED
   - Morse Code Playback with configurable intensity
   - Adjustable Morse speed (5-20 WPM)
-  - 90-second idle WiFi AP timeout to conserve power
+  - 60-second idle WiFi AP timeout to conserve power
   - Help(?) screen with Morse code definitions
-  - OTA Firmware update support (v1.2.0 and up), with fallback protection
+  - OTA Firmware update support with LED combination lock (v1.3.1+)
 
   HARDWARE:
   - Seeed Studios XIAO ESP32-C6 Module (other ESP32s can be used)
@@ -36,12 +36,21 @@
   - See schematic for complete circuit
 
   AUTHOR:
-  Created by Mike Stewart as a tool for all those fighting to maintain free-speech
-  and against Authoritarianism.
+  Created by Mike Stewart as a tool for all those fighting against Authoritarianism
+  and to maintain free-speech.
 
   ===================================================================================
   VERSION HISTORY:
   ===================================================================================
+  v1.3.0 (March 3, 2026) - Security hardening: OTA combination lock - 3-digit code
+                              displayed via RGB LED (Red/Green/Blue blinks) required
+                              before firmware upload. MAC address locking - first client
+                              to connect gets exclusive API access until power cycle.
+                              AP now shuts down when locked client disconnects (prevents
+                              secondary device WiFi access). Locked MAC cleared from RAM
+                              after AP shutdown (anti-forensics). True stateless design:
+                              removed NVS language persistence, language modal shows on
+                              every boot. Zero bytes persisted to flash.
   v1.2.1 (February 26, 2026) - Added UI language options for UI. English (default), French,
                               Spanish, Russian, Traditional Chinese, Simplified Chinese, Arabic and Farsi.
                               *** ITU Morse code is still implemented ***
@@ -91,11 +100,18 @@
 #include "driver/ledc.h"  // Hardware PWM for IR LED
 #include <Update.h>       // OTA firmware updates
 #include "esp_ota_ops.h"  // OTA boot validation
-#include <Preferences.h>  // Persistent language storage (NVS)
+// Preferences.h removed - true stateless design (no NVS usage)
+#include <atomic>         // Thread-safe atomic types
+#include "esp_task_wdt.h" // Task watchdog timer
+#include "esp_wifi.h"     // MAC address locking
+
+// Increase main loop task stack size from 8KB to 32KB
+// Required for WebServer handling multiple captive portal requests (especially Android)
+SET_LOOP_TASK_STACK_SIZE(32 * 1024);
 
 // -------------------- Version Information --------------------
-#define FIRMWARE_VERSION "1.2.1"
-#define FIRMWARE_DATE    "February 26, 2026"
+#define FIRMWARE_VERSION "1.3.0"
+#define FIRMWARE_DATE    "March 3, 2026"
 
 // -------------------- Forward Declarations --------------------
 enum Mode     { DISCREET = 0, VISIBLE = 1 };
@@ -137,6 +153,7 @@ void handlePlay();
 void handleStop();
 void handleOtaUpload();
 void handleOtaComplete();
+void handleOtaCode();
 void handleLanguageSet();
 void handleNotFound();
 
@@ -203,9 +220,7 @@ const unsigned long PULSE_INTERVAL_MS = 30;  // Update every 30ms for smooth bre
 WebServer server(80);
 DNSServer dnsServer;
 
-// -------------------- Preferences (NVS) for Language ------
-Preferences prefs;
-bool languageSet = false;  // True if user has selected a language (first-boot detection)
+// Language selection: Stateless design - modal shows every boot, no NVS persistence
 
 // -------------------- RGB via FastLED ---------------------
 CRGB leds[NUM_PIXELS];
@@ -250,10 +265,20 @@ struct AppState {
   volatile uint8_t customR = 255;  // Custom color RGB components
   volatile uint8_t customG = 0;
   volatile uint8_t customB = 255;  // Default: magenta
-  volatile uint8_t language = LANG_EN;  // UI language (persistent via NVS)
+  volatile uint8_t language = LANG_EN;  // UI language
   String text = "SOS";
   volatile bool playing = false;
 } state;
+
+// -------------------- Security: MAC Address Locking --------------------
+// First client to make a POST request gets exclusive access until power cycle
+static uint8_t lockedMac[6] = {0};
+static bool macLocked = false;
+
+// -------------------- Security: OTA Combination Lock --------------------
+// 3-digit code (1-9 each) displayed via RGB LED blinks
+static uint8_t otaCode[3] = {0, 0, 0};
+static bool otaCodeValid = false;
 
 String getTextCopy() {
   String copy;
@@ -368,6 +393,97 @@ void rgbOnCurrentColor() {
 void activeLedOn()  { if (state.mode == DISCREET) irOn();  else rgbOnCurrentColor(); }
 void activeLedOff() { if (state.mode == DISCREET) irOff(); else rgbOff(); }
 void allOff() { irOff(); rgbOff(); }
+
+// -------------------- Security: MAC Locking ----------------
+// Get connected client's MAC address (only 1 client allowed via max_conn=1)
+bool getClientMac(uint8_t* macOut) {
+  wifi_sta_list_t stationList;
+
+  if (esp_wifi_ap_get_sta_list(&stationList) != ESP_OK) return false;
+  if (stationList.num == 0) return false;
+
+  // With max_conn=1, there's only ever one client
+  memcpy(macOut, stationList.sta[0].mac, 6);
+  return true;
+}
+
+// Check if request is from locked MAC, or lock to first client
+bool checkMacLock() {
+  uint8_t clientMac[6];
+
+  // If can't get MAC, allow (fallback for reliability)
+  if (!getClientMac(clientMac)) {
+    return true;
+  }
+
+  // First client - lock to their MAC
+  if (!macLocked) {
+    memcpy(lockedMac, clientMac, 6);
+    macLocked = true;
+    Serial.printf("[Security] Locked to MAC: %02X:%02X:%02X:%02X:%02X:%02X\n",
+                  lockedMac[0], lockedMac[1], lockedMac[2],
+                  lockedMac[3], lockedMac[4], lockedMac[5]);
+    return true;
+  }
+
+  // Check if same MAC
+  return memcmp(clientMac, lockedMac, 6) == 0;
+}
+
+// -------------------- Security: OTA Combination Lock -------
+// Generate random 3-digit code (1-9 each)
+void generateOtaCode() {
+  for (int i = 0; i < 3; i++) {
+    otaCode[i] = (esp_random() % 9) + 1;  // 1-9
+  }
+  otaCodeValid = true;
+  Serial.printf("[OTA] Generated code: %d%d%d\n", otaCode[0], otaCode[1], otaCode[2]);
+}
+
+// Display OTA code via RGB LED blinks: Red=digit1, Green=digit2, Blue=digit3
+void displayOtaCodeOnLed() {
+  // Stop any current playback
+  bool wasPlaying = state.playing.load();
+  state.playing = false;
+  delay(200);
+  allOff();
+
+  // Blink pattern: Red for digit 1, Green for digit 2, Blue for digit 3
+  CRGB colors[3] = {CRGB(255,0,0), CRGB(0,255,0), CRGB(0,0,255)};
+
+  for (int digit = 0; digit < 3; digit++) {
+    delay(500);  // Pause between digits
+    for (int blink = 0; blink < otaCode[digit]; blink++) {
+      leds[0] = colors[digit];
+      FastLED.setBrightness(200);
+      FastLED.show();
+      delay(300);
+      leds[0] = CRGB::Black;
+      FastLED.show();
+      delay(200);
+    }
+  }
+
+  delay(300);
+  allOff();
+
+  // Restore playback state if needed
+  if (wasPlaying) state.playing = true;
+}
+
+// Verify OTA code - invalidates after successful use
+bool verifyOtaCode(uint8_t d1, uint8_t d2, uint8_t d3) {
+  if (!otaCodeValid) return false;
+  bool match = (d1 == otaCode[0] && d2 == otaCode[1] && d3 == otaCode[2]);
+  if (match) {
+    otaCodeValid = false;  // Invalidate after successful use
+    Serial.println("[OTA] Code verified successfully");
+  } else {
+    Serial.printf("[OTA] Code verification failed: got %d%d%d, expected %d%d%d\n",
+                  d1, d2, d3, otaCode[0], otaCode[1], otaCode[2]);
+  }
+  return match;
+}
 
 // -------------------- Morse Task --------------------------
 TaskHandle_t morseTaskHandle = nullptr;
@@ -668,6 +784,16 @@ input:checked + .slider:before{transform:translateX(20px);background:#111}
     <input type="file" id="otaFile" accept=".bin" style="position:absolute;opacity:0;width:1px;height:1px">
     <label for="otaFile" class="ota-btn" id="otaChooseLabel" style="display:block;text-align:center;background:#333;color:#fff;margin-bottom:14px;cursor:pointer">Choose .bin File</label>
     <div id="otaFileName" style="text-align:center;font-size:12px;color:#888;margin-bottom:14px">No file selected</div>
+    <button class="ota-btn" id="otaGetCode" style="background:#1a5f2a;margin-bottom:10px">Get Code</button>
+    <div id="otaCodeSection" style="display:none;margin-bottom:14px">
+      <div style="color:#8AB4F8;margin-bottom:8px;text-align:center;font-size:13px">Enter LED code:</div>
+      <div style="display:flex;gap:8px;justify-content:center">
+        <input type="number" id="otaD1" min="1" max="9" style="width:45px;height:45px;text-align:center;font-size:22px;border-radius:6px;border:2px solid #ff4444;background:#331111;color:#ff6666">
+        <input type="number" id="otaD2" min="1" max="9" style="width:45px;height:45px;text-align:center;font-size:22px;border-radius:6px;border:2px solid #44ff44;background:#113311;color:#66ff66">
+        <input type="number" id="otaD3" min="1" max="9" style="width:45px;height:45px;text-align:center;font-size:22px;border-radius:6px;border:2px solid #4444ff;background:#111133;color:#6666ff">
+      </div>
+      <div style="color:#888;font-size:11px;margin-top:6px;text-align:center">Watch LED: Red, Green, Blue blinks</div>
+    </div>
     <button class="ota-btn" id="otaUpload">Upload Firmware</button>
     <progress class="ota-progress" id="otaProgress" value="0" max="100"></progress>
     <div class="ota-status" id="otaStatus"></div>
@@ -1080,6 +1206,11 @@ const otaUpload = document.getElementById('otaUpload');
 const otaProgress = document.getElementById('otaProgress');
 const otaStatus = document.getElementById('otaStatus');
 const otaClose = document.getElementById('otaClose');
+const otaGetCode = document.getElementById('otaGetCode');
+const otaCodeSection = document.getElementById('otaCodeSection');
+const otaD1 = document.getElementById('otaD1');
+const otaD2 = document.getElementById('otaD2');
+const otaD3 = document.getElementById('otaD3');
 
 document.getElementById('settingsBtn').addEventListener('click', () => {
   const L = LANG[currentLang];
@@ -1094,6 +1225,8 @@ document.getElementById('settingsBtn').addEventListener('click', () => {
     otaProgress.value = 0;
     otaFileName.textContent = L.noFile;
     otaFileName.style.color = '#888';
+    otaCodeSection.style.display = 'none';
+    otaD1.value = ''; otaD2.value = ''; otaD3.value = '';
     buildLangSelect();
   }
 });
@@ -1101,6 +1234,35 @@ document.getElementById('settingsBtn').addEventListener('click', () => {
 otaClose.addEventListener('click', () => {
   otaModal.classList.remove('visible');
 });
+
+// OTA Code - Get code from device (displays on LED)
+otaGetCode.addEventListener('click', async () => {
+  const L = LANG[currentLang];
+  otaStatus.textContent = 'Watch the LED...';
+  otaStatus.style.color = '#8AB4F8';
+  otaGetCode.disabled = true;
+  try {
+    const resp = await fetch('/api/ota-code', {method:'POST'});
+    if (resp.ok) {
+      otaCodeSection.style.display = 'block';
+      otaStatus.textContent = 'Enter the code shown on LED';
+      otaD1.value = ''; otaD2.value = ''; otaD3.value = '';
+      otaD1.focus();
+    } else {
+      const data = await resp.json();
+      otaStatus.textContent = data.error || 'Failed to get code';
+      otaStatus.style.color = '#f44336';
+    }
+  } catch(e) {
+    otaStatus.textContent = 'Network error';
+    otaStatus.style.color = '#f44336';
+  }
+  otaGetCode.disabled = false;
+});
+
+// Auto-advance to next digit field
+otaD1.addEventListener('input', () => { if (otaD1.value.length >= 1) otaD2.focus(); });
+otaD2.addEventListener('input', () => { if (otaD2.value.length >= 1) otaD3.focus(); });
 
 // Android dialog handlers
 document.getElementById('androidClose').addEventListener('click', () => {
@@ -1164,6 +1326,14 @@ otaUpload.addEventListener('click', async () => {
     return;
   }
 
+  // Validate OTA code (must be 3 digits, each 1-9)
+  const code = '' + (otaD1.value||'') + (otaD2.value||'') + (otaD3.value||'');
+  if (code.length !== 3 || !/^[1-9]{3}$/.test(code)) {
+    otaStatus.textContent = 'Enter 3-digit code first (click Get Code)';
+    otaStatus.style.color = '#ff9800';
+    return;
+  }
+
   otaUpload.disabled = true;
   otaStatus.textContent = L.uploading;
   otaStatus.style.color = '#8AB4F8';
@@ -1206,6 +1376,7 @@ otaUpload.addEventListener('click', async () => {
   });
 
   xhr.open('POST', '/api/ota');
+  xhr.setRequestHeader('X-OTA-Code', code);
   xhr.send(formData);
 });
 </script>
@@ -1409,13 +1580,22 @@ void handleState(){
   doc["version"]  = FIRMWARE_VERSION;
   // Language info for UI localization
   doc["lang"]     = LANG_CODES[state.language];
-  doc["firstBoot"]= !languageSet;
+  doc["firstBoot"]= true;  // Always show language modal (stateless design)
   String out; serializeJson(doc, out);
   server.send(200, "application/json", out);
 }
 
 void handleUpdate(){
   noteActivity();
+  if (!checkMacLock()) {
+    server.send(403, "application/json", "{\"error\":\"access denied\"}");
+    return;
+  }
+  // Payload size limit (defense-in-depth against malformed input)
+  if (server.arg("plain").length() > 512) {
+    server.send(413, "application/json", "{\"error\":\"payload too large\"}");
+    return;
+  }
   StaticJsonDocument<256> doc;
   auto err = deserializeJson(doc, server.arg("plain"));
   if (err) {
@@ -1446,6 +1626,15 @@ void handleUpdate(){
 
 void handlePlay(){
   noteActivity();
+  if (!checkMacLock()) {
+    server.send(403, "application/json", "{\"error\":\"access denied\"}");
+    return;
+  }
+  // Payload size limit (defense-in-depth against malformed input)
+  if (server.arg("plain").length() > 512) {
+    server.send(413, "application/json", "{\"error\":\"payload too large\"}");
+    return;
+  }
   StaticJsonDocument<256> doc;
   auto err = deserializeJson(doc, server.arg("plain"));
   if (!err && doc.containsKey("text")) {
@@ -1463,6 +1652,10 @@ void handlePlay(){
 
 void handleStop(){
   noteActivity();
+  if (!checkMacLock()) {
+    server.send(403, "application/json", "{\"error\":\"access denied\"}");
+    return;
+  }
   state.playing = false;
   allOff();
   server.send(200, "application/json", "{\"playing\":false}");
@@ -1471,6 +1664,15 @@ void handleStop(){
 // -------------------- Language Selection --------------------
 void handleLanguageSet(){
   noteActivity();
+  if (!checkMacLock()) {
+    server.send(403, "application/json", "{\"error\":\"access denied\"}");
+    return;
+  }
+  // Payload size limit (defense-in-depth against malformed input)
+  if (server.arg("plain").length() > 256) {
+    server.send(413, "application/json", "{\"error\":\"payload too large\"}");
+    return;
+  }
   StaticJsonDocument<128> doc;
   auto err = deserializeJson(doc, server.arg("plain"));
   if (err) {
@@ -1499,13 +1701,8 @@ void handleLanguageSet(){
     return;
   }
 
-  // Update state and persist to NVS
+  // Update state (RAM only - stateless design, no NVS persistence)
   state.language = (uint8_t)langIndex;
-  languageSet = true;
-
-  prefs.putUChar("lang", state.language);
-  prefs.putBool("langSet", true);
-
   Serial.printf("Language changed to: %s\n", LANG_CODES[state.language]);
 
   server.send(200, "application/json", "{\"ok\":true}");
@@ -1521,6 +1718,24 @@ static String otaErrorMessage = "";
 // Max firmware size (from partition table: 0x140000 = 1,310,720 bytes)
 const size_t OTA_MAX_SIZE = 0x140000;
 
+// Handler to generate and display OTA code via LED blinks
+void handleOtaCode() {
+  noteActivity();
+
+  // Check MAC lock
+  if (!checkMacLock()) {
+    server.send(403, "application/json", "{\"error\":\"access denied\"}");
+    return;
+  }
+
+  // Generate new code and display it via LED
+  generateOtaCode();
+  displayOtaCodeOnLed();
+
+  // Return success (code is NOT sent in response - must be read from LED)
+  server.send(200, "application/json", "{\"ready\":true}");
+}
+
 void handleOtaUpload() {
   HTTPUpload& upload = server.upload();
 
@@ -1528,11 +1743,38 @@ void handleOtaUpload() {
   noteActivity();
 
   if (upload.status == UPLOAD_FILE_START) {
+    // Check MAC lock first
+    if (!checkMacLock()) {
+      otaHadError = true;
+      otaErrorMessage = "Access denied";
+      return;
+    }
+
     // Try to acquire mutex for exclusive OTA access (prevents concurrent uploads)
     if (!otaMutex || xSemaphoreTake(otaMutex, pdMS_TO_TICKS(100)) != pdTRUE) {
       otaHadError = true;
       otaErrorMessage = "Update already in progress";
       Serial.println("[OTA] Rejected: another update in progress");
+      return;
+    }
+
+    // Verify OTA combination code (displayed on LED via /api/ota-code)
+    String codeHeader = server.header("X-OTA-Code");
+    if (codeHeader.length() != 3) {
+      otaHadError = true;
+      otaErrorMessage = "Missing OTA code - click Get Code first";
+      Serial.println("[OTA] Rejected: missing or invalid OTA code header");
+      xSemaphoreGive(otaMutex);
+      return;
+    }
+    uint8_t d1 = codeHeader[0] - '0';
+    uint8_t d2 = codeHeader[1] - '0';
+    uint8_t d3 = codeHeader[2] - '0';
+    if (!verifyOtaCode(d1, d2, d3)) {
+      otaHadError = true;
+      otaErrorMessage = "Invalid OTA code";
+      Serial.println("[OTA] Rejected: wrong OTA code");
+      xSemaphoreGive(otaMutex);
       return;
     }
 
@@ -1715,7 +1957,6 @@ void setup(){
   Serial.println("  The Signet Morse Beacon");
   Serial.printf("  Firmware Version: %s\n", FIRMWARE_VERSION);
   Serial.printf("  Build Date: %s\n", FIRMWARE_DATE);
-  Serial.println("  (c) 2025 Cunths & Queeths LLC");
   Serial.println("===========================================");
   Serial.println();
 
@@ -1745,11 +1986,9 @@ void setup(){
     Serial.println("WARNING: LittleFS mount failed - splash image unavailable");
   }
 
-  // Initialize Preferences (NVS) for persistent language storage
-  prefs.begin("signet", false);  // Namespace "signet", read-write mode
-  state.language = prefs.getUChar("lang", LANG_EN);
-  languageSet = prefs.getBool("langSet", false);
-  Serial.printf("Language: %s (set=%s)\n", LANG_CODES[state.language], languageSet ? "true" : "false");
+  // Stateless design: Default to English, language modal shows every boot
+  state.language = LANG_EN;
+  Serial.printf("Language: %s (stateless - modal shows each boot)\n", LANG_CODES[state.language]);
 
   // Create mutex for thread-safe text access
   textMutex = xSemaphoreCreateMutex();
@@ -1791,7 +2030,12 @@ void setup(){
   server.on("/api/play",     HTTP_POST, handlePlay);
   server.on("/api/stop",     HTTP_POST, handleStop);
   server.on("/api/language", HTTP_POST, handleLanguageSet);
+  server.on("/api/ota-code", HTTP_POST, handleOtaCode);
   server.on("/api/ota",      HTTP_POST, handleOtaComplete, handleOtaUpload);
+
+  // Collect custom headers for OTA code verification
+  const char* otaHeaders[] = {"X-OTA-Code"};
+  server.collectHeaders(otaHeaders, 1);
 
   // Serve splash image from LittleFS as /bb.jpg
   server.on("/bb.jpg", HTTP_GET, [](){
@@ -1837,6 +2081,31 @@ void loop(){
   if (apRunning) {
     dnsServer.processNextRequest();
     server.handleClient();
+
+    // Security: If MAC is locked and locked client disconnected, shut down AP
+    if (macLocked) {
+      wifi_sta_list_t stationList;
+      if (esp_wifi_ap_get_sta_list(&stationList) == ESP_OK) {
+        bool lockedClientPresent = false;
+        for (int i = 0; i < stationList.num; i++) {
+          if (memcmp(stationList.sta[i].mac, lockedMac, 6) == 0) {
+            lockedClientPresent = true;
+            break;
+          }
+        }
+        if (!lockedClientPresent) {
+          Serial.println("[Security] Locked client disconnected - shutting down AP");
+          dnsServer.stop();
+          WiFi.softAPdisconnect(true);
+          WiFi.mode(WIFI_OFF);
+          apRunning = false;
+          allOff();
+          // Clear locked MAC from memory (defense-in-depth)
+          memset(lockedMac, 0, sizeof(lockedMac));
+          macLocked = false;
+        }
+      }
+    }
 
     // Pulse blue LED while waiting for Web UI connection
     if (!uiServed && !state.playing) {
