@@ -23,6 +23,11 @@
   using a blinking light source.
 </p>
 
+<!-- ADD HERE -->
+<a href="https://www.tindie.com/products/signet-systems/the-signet/">
+  <img src="https://d2ss6ovg47m0r5.cloudfront.net/badges/tindie-larges.png" alt="I sell on Tindie" width="200">
+</a>
+
 </div>
 
 <div align="center">
