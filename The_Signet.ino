@@ -203,7 +203,7 @@ static String buildApSsidWithMacTail() {
 }
 
 // -------------------- WiFi Idle timeout logic --------------------
-const unsigned long AP_IDLE_TIMEOUT_MS = 90000; // 90 seconds
+const unsigned long AP_IDLE_TIMEOUT_MS = 60000; // 60 seconds (privacy: minimize SSID exposure)
 unsigned long lastActivityMs = 0;
 bool apRunning = false;
 
