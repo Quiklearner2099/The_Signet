@@ -55,8 +55,9 @@
 | **Snap-fit 3D-printable enclosure** (2 pieces) | **OTA firmware updates** — upload new firmware via the captive portal |
 | **Minimal soldering required** | **True stateless design** — zero bytes persisted to flash |
 
-**NO telemetry, NO accounts, NO bullshyte**
+ **NO telemetry, NO accounts, NO bullshyte**
 
+Click [HERE](https://github.com/Quiklearner2099/The_Signet/blob/main/Documentation/The_Signet_Security_Brief_v1.3.0.pdf) to view the Security Brief  
 </div>
 
 <hr/>
