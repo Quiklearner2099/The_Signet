@@ -8,6 +8,7 @@
 
 ![The Signet banner](data/the_signet_banner_1600x400.png)
 
+[![Quick Start Guide](https://img.shields.io/badge/Quick%20Start%20Guide-v1.3.0-red?style=flat&logo=googledocs&logoColor=white)](https://github.com/Quiklearner2099/The_Signet/blob/main/Documentation/The_Signet_QuickStart_Guide_v1.3.0.pdf)
 [![Steganography](https://img.shields.io/badge/Steganography-Morse%20Code-purple.svg)]()
 [![Free Speech](https://img.shields.io/badge/Free%20Speech-Tool-1DA1F2.svg)]()
 ![Visitors](https://komarev.com/ghpvc/?username=Quiklearner2099&repo=The_Signet&color=blue)
@@ -21,6 +22,11 @@
   (<strong>encoded in Morse code</strong>)<br>into <strong>recorded video footage</strong>
   using a blinking light source.
 </p>
+
+<!-- ADD HERE -->
+<a href="https://www.tindie.com/products/signet-systems/the-signet/">
+  <img src="https://d2ss6ovg47m0r5.cloudfront.net/badges/tindie-larges.png" alt="I sell on Tindie" width="200">
+</a>
 
 </div>
 
@@ -55,8 +61,9 @@
 | **Snap-fit 3D-printable enclosure** (2 pieces) | **OTA firmware updates** — upload new firmware via the captive portal |
 | **Minimal soldering required** | **True stateless design** — zero bytes persisted to flash |
 
-**NO telemetry, NO accounts, NO bullshyte**
+ **NO telemetry, NO accounts, NO bullshyte**
 
+Click [HERE](https://github.com/Quiklearner2099/The_Signet/blob/main/Documentation/The_Signet_Security_Brief_v1.3.0.pdf) to view the Security Brief  
 </div>
 
 <hr/>
