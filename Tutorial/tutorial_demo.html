@@ -545,11 +545,17 @@ html, body {
 }
 
 .phone-screen .footer {
-  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   font-size: 14px;
   color: #FFD700;
   font-weight: 700;
   margin-top: 10px;
+}
+
+.phone-screen .footer-text {
+  margin: 0 8px;
 }
 
 .phone-screen .version {
@@ -579,6 +585,237 @@ html, body {
   transform: scale(0.85);
   background: #8AB4F8;
   color: #000;
+}
+
+.phone-screen .settings-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #333;
+  color: #ccc;
+  border: none;
+  font-size: 16px;
+  line-height: 28px;
+  text-align: center;
+  cursor: pointer;
+  transition: transform 0.4s ease, background 0.4s ease;
+}
+
+.phone-screen .settings-btn.pressing {
+  transform: scale(0.85);
+  background: #8AB4F8;
+  color: #000;
+}
+
+.phone-screen .tx-time {
+  margin-left: auto;
+  font-size: 14px;
+  color: #8AB4F8;
+  font-weight: 400;
+}
+
+.phone-screen .wpm-icon {
+  font-size: 20px;
+  opacity: 0.7;
+  display: flex;
+  align-items: center;
+}
+
+.phone-screen .seg button svg {
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
+  vertical-align: middle;
+}
+
+/* Language selection modal */
+.phone-screen .lang-modal {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,.95);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .3s;
+}
+
+.phone-screen .lang-modal.visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.phone-screen .lang-card {
+  background: #1E1E1E;
+  border-radius: 16px;
+  padding: 20px;
+  width: 90%;
+  max-width: 280px;
+  text-align: center;
+}
+
+.phone-screen .lang-card h2 {
+  color: #fff;
+  font-size: 16px;
+  margin-bottom: 6px;
+}
+
+.phone-screen .lang-card p {
+  color: #888;
+  font-size: 11px;
+  margin-bottom: 14px;
+}
+
+.phone-screen .lang-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.phone-screen .lang-btn {
+  padding: 10px 6px;
+  border-radius: 8px;
+  border: 1px solid #333;
+  background: #222;
+  color: #fff;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all .2s;
+}
+
+.phone-screen .lang-btn:hover {
+  background: #333;
+  border-color: #8AB4F8;
+}
+
+.phone-screen .lang-btn.selected {
+  background: #8AB4F8;
+  color: #000;
+  border-color: #8AB4F8;
+}
+
+.phone-screen .lang-native {
+  display: block;
+  font-size: 10px;
+  color: #888;
+  margin-top: 2px;
+}
+
+.phone-screen .lang-btn.selected .lang-native {
+  color: #333;
+}
+
+.phone-screen .lang-confirm {
+  margin-top: 14px;
+  width: 100%;
+  padding: 12px;
+  border-radius: 8px;
+  border: none;
+  background: #8AB4F8;
+  color: #000;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.phone-screen .lang-confirm:disabled {
+  background: #555;
+  color: #888;
+  cursor: not-allowed;
+}
+
+/* OTA update modal */
+.phone-screen .ota-modal {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,.9);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9998;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .2s;
+}
+
+.phone-screen .ota-modal.visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.phone-screen .ota-card {
+  background: #1E1E1E;
+  border-radius: 16px;
+  padding: 16px;
+  width: 90%;
+  max-width: 280px;
+}
+
+.phone-screen .ota-card h3 {
+  color: #fff;
+  margin: 0 0 10px;
+  font-size: 14px;
+  text-align: center;
+}
+
+.phone-screen .ota-version {
+  text-align: center;
+  font-size: 10px;
+  color: #666;
+  margin-bottom: 10px;
+}
+
+.phone-screen .ota-btn {
+  width: 100%;
+  padding: 10px;
+  border-radius: 8px;
+  border: none;
+  background: #8AB4F8;
+  color: #000;
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+  margin-bottom: 8px;
+}
+
+.phone-screen .ota-code-section {
+  margin: 10px 0;
+}
+
+.phone-screen .ota-code-label {
+  color: #8AB4F8;
+  margin-bottom: 6px;
+  text-align: center;
+  font-size: 11px;
+}
+
+.phone-screen .ota-code-inputs {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+}
+
+.phone-screen .ota-digit {
+  width: 40px;
+  height: 40px;
+  text-align: center;
+  font-size: 18px;
+  border-radius: 6px;
+  background: #111;
+  color: #fff;
+}
+
+.phone-screen .ota-digit.red { border: 2px solid #ff4444; color: #ff6666; background: #331111; }
+.phone-screen .ota-digit.green { border: 2px solid #44ff44; color: #66ff66; background: #113311; }
+.phone-screen .ota-digit.blue { border: 2px solid #4444ff; color: #6666ff; background: #111133; }
+
+.phone-screen .ota-hint {
+  color: #888;
+  font-size: 9px;
+  margin-top: 4px;
+  text-align: center;
 }
 
 /* Splash screen */
@@ -1208,13 +1445,32 @@ html, body {
           </div>
         </div>
 
-        <!-- Splash screen (stage 4) -->
+        <!-- Language Selection modal (stage 4) -->
+        <div class="lang-modal" id="lang-modal">
+          <div class="lang-card">
+            <h2>Select Language</h2>
+            <p>Choose your preferred language</p>
+            <div class="lang-grid" id="lang-grid">
+              <button class="lang-btn" data-lang="en">English<span class="lang-native">English</span></button>
+              <button class="lang-btn" data-lang="es">Spanish<span class="lang-native">Español</span></button>
+              <button class="lang-btn" data-lang="fr">French<span class="lang-native">Français</span></button>
+              <button class="lang-btn" data-lang="ru">Russian<span class="lang-native">Русский</span></button>
+              <button class="lang-btn" data-lang="zh-CN">Chinese<span class="lang-native">简体中文</span></button>
+              <button class="lang-btn" data-lang="zh-TW">Traditional<span class="lang-native">繁體中文</span></button>
+              <button class="lang-btn" data-lang="fa">Farsi<span class="lang-native">فارسی</span></button>
+              <button class="lang-btn" data-lang="ar">Arabic<span class="lang-native">العربية</span></button>
+            </div>
+            <button class="lang-confirm" id="lang-confirm" disabled>Continue</button>
+          </div>
+        </div>
+
+        <!-- Splash screen (stage 5) -->
         <div id="splash">
           <img src="data/bb.jpg" alt="Big Brother">
           <p>Click anywhere to send him a message...</p>
         </div>
 
-        <!-- Help overlay (stage 12) -->
+        <!-- Help overlay (stage 13) -->
         <div id="help-overlay">
           <span class="back" onclick="hideHelp()">← Back to Control</span>
           <h1>Morse Code Reference</h1>
@@ -1248,19 +1504,19 @@ html, body {
           </table>
         </div>
 
-        <!-- Main UI (stages 5-11, 13) -->
+        <!-- Main UI (stages 6-12, 15) -->
         <div class="main-ui" id="main-ui">
           <div class="appbar">The Signet</div>
           <div class="wrap">
             <div class="grid">
 
               <div class="card" id="card-message">
-                <h3 class="msg-header">Message <span class="max-hint">(MAX 200 Characters)</span></h3>
+                <h3 class="msg-header">Message <span class="max-hint">(MAX 200 Characters)</span><span class="tx-time" id="txTime">00:03</span></h3>
                 <textarea class="msg-input" id="msg" placeholder="SOS" maxlength="200" rows="3">SOS</textarea>
                 <div class="msg-hint">A-Z 0-9 . , ? / - ( ) @ = space &lt;KA&gt; &lt;AR&gt;</div>
                 <div class="btn-row">
-                  <button class="play" id="play-btn">&#9654; Play</button>
-                  <button class="stop" id="stop-btn">&#9632; Stop</button>
+                  <button class="play" id="play-btn" title="Play">&#9654;</button>
+                  <button class="stop" id="stop-btn" title="Stop">&#9632;</button>
                 </div>
                 <div class="status" id="status">Idle</div>
               </div>
@@ -1269,16 +1525,16 @@ html, body {
                 <div class="card" id="card-mode">
                   <h3>Mode</h3>
                   <div class="seg" id="modeGroup">
-                    <button class="active" data-mode="DISCREET">IR</button>
-                    <button data-mode="VISIBLE">RGB</button>
+                    <button class="active" data-mode="DISCREET" title="IR/Invisible"><svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M12 7c2.76 0 5 2.24 5 5 0 .65-.13 1.26-.36 1.83l2.92 2.92c1.51-1.26 2.7-2.89 3.43-4.75-1.73-4.39-6-7.5-11-7.5-1.4 0-2.74.25-3.98.7l2.16 2.16C10.74 7.13 11.35 7 12 7zM2 4.27l2.28 2.28.46.46A11.804 11.804 0 001 12c1.73 4.39 6 7.5 11 7.5 1.55 0 3.03-.3 4.38-.84l.42.42L19.73 22 21 20.73 3.27 3 2 4.27zM7.53 9.8l1.55 1.55c-.05.21-.08.43-.08.65 0 1.66 1.34 3 3 3 .22 0 .44-.03.65-.08l1.55 1.55c-.67.33-1.41.53-2.2.53-2.76 0-5-2.24-5-5 0-.79.2-1.53.53-2.2zm4.31-.78l3.15 3.15.02-.16c0-1.66-1.34-3-3-3l-.17.01z"/></svg></button>
+                    <button data-mode="VISIBLE" title="RGB/Visible"><svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg></button>
                   </div>
                 </div>
                 <div class="card" id="card-intensity">
                   <h3>Intensity</h3>
                   <div class="seg" id="intensityGroup">
-                    <button data-int="LOW">Lo</button>
-                    <button class="active" data-int="MED">Med</button>
-                    <button data-int="HIGH">Hi</button>
+                    <button data-int="LOW" title="Low"><svg viewBox="0 0 24 24" width="18" height="18"><circle cx="12" cy="12" r="4" fill="currentColor"/><line x1="12" y1="2" x2="12" y2="5" stroke="currentColor" stroke-width="2"/><line x1="12" y1="19" x2="12" y2="22" stroke="currentColor" stroke-width="2"/><line x1="2" y1="12" x2="5" y2="12" stroke="currentColor" stroke-width="2"/><line x1="19" y1="12" x2="22" y2="12" stroke="currentColor" stroke-width="2"/></svg></button>
+                    <button class="active" data-int="MED" title="Medium"><svg viewBox="0 0 24 24" width="18" height="18"><circle cx="12" cy="12" r="4" fill="currentColor"/><line x1="12" y1="1" x2="12" y2="5" stroke="currentColor" stroke-width="2"/><line x1="12" y1="19" x2="12" y2="23" stroke="currentColor" stroke-width="2"/><line x1="1" y1="12" x2="5" y2="12" stroke="currentColor" stroke-width="2"/><line x1="19" y1="12" x2="23" y2="12" stroke="currentColor" stroke-width="2"/><line x1="4.22" y1="4.22" x2="6.64" y2="6.64" stroke="currentColor" stroke-width="2"/><line x1="17.36" y1="17.36" x2="19.78" y2="19.78" stroke="currentColor" stroke-width="2"/><line x1="4.22" y1="19.78" x2="6.64" y2="17.36" stroke="currentColor" stroke-width="2"/><line x1="17.36" y1="6.64" x2="19.78" y2="4.22" stroke="currentColor" stroke-width="2"/></svg></button>
+                    <button data-int="HIGH" title="High"><svg viewBox="0 0 24 24" width="18" height="18"><circle cx="12" cy="12" r="5" fill="currentColor"/><line x1="12" y1="0" x2="12" y2="5" stroke="currentColor" stroke-width="2.5"/><line x1="12" y1="19" x2="12" y2="24" stroke="currentColor" stroke-width="2.5"/><line x1="0" y1="12" x2="5" y2="12" stroke="currentColor" stroke-width="2.5"/><line x1="19" y1="12" x2="24" y2="12" stroke="currentColor" stroke-width="2.5"/><line x1="3.5" y1="3.5" x2="6.64" y2="6.64" stroke="currentColor" stroke-width="2.5"/><line x1="17.36" y1="17.36" x2="20.5" y2="20.5" stroke="currentColor" stroke-width="2.5"/><line x1="3.5" y1="20.5" x2="6.64" y2="17.36" stroke="currentColor" stroke-width="2.5"/><line x1="17.36" y1="6.64" x2="20.5" y2="3.5" stroke="currentColor" stroke-width="2.5"/></svg></button>
                   </div>
                 </div>
               </div>
@@ -1303,19 +1559,41 @@ html, body {
               </div>
 
               <div class="card" id="card-speed">
-                <h3>Speed</h3>
                 <div class="wpm-row">
-                  <div class="wpm-val"><span id="wpmDisplay">10</span> <small>WPM</small></div>
+                  <span class="wpm-icon">&#128034;</span>
                   <div class="wpm-slider">
                     <input type="range" id="wpm" min="5" max="20" step="5" value="10">
-                    <div class="wpm-labels"><span>5</span><span>10</span><span>15</span><span>20</span></div>
                   </div>
+                  <span class="wpm-icon">&#128007;</span>
                 </div>
+                <div class="wpm-val" style="text-align:center;margin-top:8px"><span id="wpmDisplay">10</span> <small>WPM</small></div>
               </div>
 
             </div>
-            <div class="footer"><a href="#" class="help-btn" id="help-btn">?</a>1984 was not an instruction manual</div>
-            <div class="version">Firmware v1.1.1</div>
+            <div class="footer"><a href="#" class="help-btn" id="help-btn">?</a><span class="footer-text">1984 was not an instruction manual</span><button class="settings-btn" id="settings-btn">&#9881;</button></div>
+            <div class="version">Firmware v1.3.0</div>
+          </div>
+
+          <!-- OTA Update modal (stage 14) -->
+          <div class="ota-modal" id="ota-modal">
+            <div class="ota-card">
+              <h3>Firmware Update</h3>
+              <div class="ota-version">Current: v1.3.0</div>
+              <button class="ota-btn" style="background:#333;color:#fff;margin-bottom:10px">Choose .bin File</button>
+              <div style="text-align:center;font-size:11px;color:#888;margin-bottom:10px">No file selected</div>
+              <button class="ota-btn" style="background:#1a5f2a;margin-bottom:10px">Get Code</button>
+              <div class="ota-code-section">
+                <div class="ota-code-label">Enter LED code:</div>
+                <div class="ota-code-inputs">
+                  <input type="text" class="ota-digit red" value="3" maxlength="1">
+                  <input type="text" class="ota-digit green" value="7" maxlength="1">
+                  <input type="text" class="ota-digit blue" value="2" maxlength="1">
+                </div>
+                <div class="ota-hint">Watch LED: Red, Green, Blue blinks</div>
+              </div>
+              <button class="ota-btn">Upload Firmware</button>
+              <button class="ota-btn" style="background:#333;color:#fff;margin-top:8px">Close</button>
+            </div>
           </div>
         </div>
 
@@ -1335,7 +1613,7 @@ html, body {
         <a href="https://github.com/Quiklearner2099/The_Signet" target="_blank" class="github-btn" id="github-btn">GitHub Repository</a>
         <button class="next-btn" id="next-btn">Next →</button>
       </div>
-      <div class="stage-indicator" id="stage-indicator">Step 1 of 13</div>
+      <div class="stage-indicator" id="stage-indicator">Step 1 of 15</div>
     </div>
 
     <!-- Photo Panel (bottom) -->
@@ -1401,6 +1679,20 @@ const stages = [
   },
   {
     id: 4,
+    title: "Language Selection",
+    photo: "on",
+    screen: "language",
+    highlight: null,
+    content: `
+      <h2>Language Selection</h2>
+      <p>On first boot, a language selection modal appears.</p>
+      <p>Choose from <strong class="highlight">8 supported languages</strong>: English, Spanish, French, Russian, Simplified Chinese, Traditional Chinese, Farsi, and Arabic.</p>
+      <p>RTL (right-to-left) languages like Arabic and Farsi are fully supported.</p>
+      <div class="note">⚠️ <strong>NOTE:</strong> Language selection is RAM-only. The device resets to English on every power cycle (true stateless design - no forensic trail).</div>
+    `
+  },
+  {
+    id: 5,
     title: "Welcome",
     photo: "on",
     screen: "splash",
@@ -1412,7 +1704,7 @@ const stages = [
     `
   },
   {
-    id: 5,
+    id: 6,
     title: "Your Message",
     photo: "on",
     screen: "main",
@@ -1422,37 +1714,38 @@ const stages = [
       <p>Enter the text you want to transmit in Morse code.</p>
       <p>Supported characters: A-Z, 0-9, and common punctuation.</p>
       <p>Optionally, use <strong>"&lt;KA&gt;"</strong> to signal the start of transmission and use <strong>"&lt;AR&gt;"</strong> to signal end of message.</p>
-      <p>Maximum 200 characters.</p>
+      <p>Maximum 200 characters. The <strong class="highlight">TX time</strong> shows estimated transmission duration.</p>
     `
   },
   {
-    id: 6,
+    id: 7,
     title: "Transmission Mode",
     photo: "on",
     screen: "main",
     highlight: "card-mode",
     content: `
       <h2>Transmission Mode</h2>
+      <p>Tap the <strong class="highlight">eye-slash icon</strong> for IR (invisible) or the <strong class="highlight">open eye icon</strong> for RGB (visible).</p>
       <p><strong class="highlight">IR (Discreet):</strong> Invisible infrared light. Perfect for embedding hidden messages in video recordings. Undetectable to the naked eye.</p>
       <p><strong class="highlight">RGB (Visible):</strong> Colored LED light. Use for visible signaling or when stealth isn't required.</p>
     `
   },
   {
-    id: 7,
+    id: 8,
     title: "Intensity",
     photo: "on",
     screen: "main",
     highlight: "card-intensity",
     content: `
       <h2>Intensity</h2>
-      <p>Control the brightness of your transmission.</p>
-      <p><strong class="highlight">Lo:</strong> Subtle, power-efficient. Best for close-range or battery conservation.</p>
-      <p><strong class="highlight">Med:</strong> Balanced brightness and power consumption.</p>
-      <p><strong class="highlight">Hi:</strong> Maximum brightness for long-range visibility or challenging lighting conditions.</p>
+      <p>Control the brightness of your transmission using the LED ray icons.</p>
+      <p><strong class="highlight">4 rays (Low):</strong> Subtle, power-efficient. Best for close-range or battery conservation.</p>
+      <p><strong class="highlight">8 rays (Medium):</strong> Balanced brightness and power consumption.</p>
+      <p><strong class="highlight">8 thick rays (High):</strong> Maximum brightness for long-range visibility or challenging lighting conditions.</p>
     `
   },
   {
-    id: 8,
+    id: 9,
     title: "Color Selection",
     photo: "on",
     screen: "main",
@@ -1466,7 +1759,7 @@ const stages = [
     `
   },
   {
-    id: 9,
+    id: 10,
     title: "Dazzle Effect",
     photo: "on",
     screen: "main",
@@ -1479,35 +1772,35 @@ const stages = [
     `
   },
   {
-    id: 10,
+    id: 11,
     title: "Transmission Speed",
     photo: "on",
     screen: "main",
     highlight: "card-speed",
     content: `
       <h2>Transmission Speed</h2>
-      <p>Adjust the Words Per Minute (WPM) of your Morse code transmission.</p>
+      <p>Drag the slider between the <strong class="highlight">🐢 tortoise</strong> (slow) and <strong class="highlight">🐇 hare</strong> (fast) icons.</p>
       <p><strong class="highlight">5 WPM:</strong> Slow, easy to decode manually.</p>
       <p><strong class="highlight">10 WPM:</strong> Standard speed, good balance.</p>
       <p><strong class="highlight">15-20 WPM:</strong> Fast, requires experience or software to decode.</p>
     `
   },
   {
-    id: 11,
+    id: 12,
     title: "Transmitting",
     photo: "on",
     screen: "main",
     highlight: "card-message",
     content: `
       <h2>Transmitting</h2>
-      <p>Press <strong class="highlight">Play</strong> to begin broadcasting your message in Morse code. The message will repeat continuously.</p>
-      <p>Press <strong class="highlight">Stop</strong> to end transmission.</p>
+      <p>Press <strong class="highlight">▶</strong> to begin broadcasting your message in Morse code. The message will repeat continuously.</p>
+      <p>Press <strong class="highlight">■</strong> to end transmission.</p>
       <p>The status indicator shows "Playing..." or "Idle" to confirm the current state.</p>
-      <div class="note">⚠️ <strong>NOTE:</strong> The WiFi Access Point automatically shuts down after 90 seconds of inactivity to conserve battery.</div>
+      <div class="note">⚠️ <strong>NOTE:</strong> The WiFi Access Point automatically shuts down after 60 seconds of inactivity to conserve battery and minimize SSID exposure.</div>
     `
   },
   {
-    id: 12,
+    id: 13,
     title: "Morse Code Reference",
     photo: "on",
     screen: "help",
@@ -1520,7 +1813,23 @@ const stages = [
     `
   },
   {
-    id: 13,
+    id: 14,
+    title: "Firmware Update",
+    photo: "on",
+    screen: "ota",
+    highlight: null,
+    content: `
+      <h2>Firmware Update</h2>
+      <p>Tap the <strong class="highlight">⚙ gear</strong> icon to access firmware updates.</p>
+      <p><strong>Secure 3-step verification process:</strong></p>
+      <p>1. Select a <strong>.bin</strong> firmware file</p>
+      <p>2. Tap <strong class="highlight">Get Code</strong> - watch the LED blink a 3-digit code (Red, Green, Blue)</p>
+      <p>3. Enter the code in the color-coded input fields and upload</p>
+      <div class="note">⚠️ <strong>NOTE:</strong> The LED code ensures only someone with physical access to the device can update firmware. This prevents unauthorized remote updates.</div>
+    `
+  },
+  {
+    id: 15,
     title: "Ready to Signal",
     photo: "on",
     screen: "main",
@@ -1609,6 +1918,8 @@ function updateStage() {
   splash.classList.remove('visible');
   mainUI.classList.remove('visible');
   helpOverlay.classList.remove('visible');
+  document.getElementById('lang-modal').classList.remove('visible');
+  document.getElementById('ota-modal').classList.remove('visible');
 
   // Reset WiFi screen state
   signetNetwork.classList.remove('selected', 'connected');
@@ -1623,8 +1934,8 @@ function updateStage() {
   rgbIndicator.classList.remove('visible');
   irIndicator.classList.remove('visible');
 
-  // Set mode buttons based on step (RGB from step 7 onwards, step 6 animates)
-  const useRgbMode = stage.id > 6;
+  // Set mode buttons based on step (RGB from step 8 onwards, step 7 animates)
+  const useRgbMode = stage.id > 7;
   modeButtons.forEach(btn => {
     btn.classList.toggle('active', btn.dataset.mode === (useRgbMode ? 'VISIBLE' : 'DISCREET'));
   });
@@ -1660,6 +1971,24 @@ function updateStage() {
         ledRgb.classList.add('visible', 'blink-confirm');
       }, 2000);
       break;
+    case 'language':
+      mainUI.classList.add('visible');
+      const langModal = document.getElementById('lang-modal');
+      langModal.classList.add('visible');
+      // Animate language selection
+      setTimeout(() => {
+        if (stages[currentStage].id !== 4) return;
+        const langBtns = document.querySelectorAll('#lang-grid .lang-btn');
+        const englishBtn = langBtns[0];
+        englishBtn.classList.add('selected');
+        document.getElementById('lang-confirm').disabled = false;
+        // After selection, animate continue and close
+        setTimeout(() => {
+          if (stages[currentStage].id !== 4) return;
+          langModal.classList.remove('visible');
+        }, 2000);
+      }, 1000);
+      break;
     case 'splash':
       mainUI.classList.add('visible');
       splash.classList.add('visible');
@@ -1669,8 +1998,8 @@ function updateStage() {
       if (stage.highlight) {
         document.getElementById(stage.highlight).classList.add('highlighted');
       }
-      // Step 6: Show RGB mode selection and LED indicators
-      if (stage.id === 6) {
+      // Step 7: Show RGB mode selection and LED indicators
+      if (stage.id === 7) {
         // Show LED indicators
         rgbIndicator.classList.add('visible');
         irIndicator.classList.add('visible');
@@ -1683,8 +2012,8 @@ function updateStage() {
         }, 800);
       }
 
-      // Step 9: Show dazzle effect being turned on and off
-      if (stage.id === 9) {
+      // Step 10: Show dazzle effect being turned on and off
+      if (stage.id === 10) {
         const dazzleCheckbox = document.getElementById('dazzle');
 
         // Position LED
@@ -1693,22 +2022,22 @@ function updateStage() {
 
         // Turn on dazzle switch after 500ms
         setTimeout(() => {
-          if (stages[currentStage].id !== 9) return;
+          if (stages[currentStage].id !== 10) return;
           dazzleCheckbox.checked = true;
 
           // Start dazzle LED effect after switch is on
           setTimeout(() => {
-            if (stages[currentStage].id !== 9) return;
+            if (stages[currentStage].id !== 10) return;
             ledRgb.classList.remove('blue-pulse', 'blink-confirm', 'red-morse', 'on', 'off');
             ledRgb.classList.add('dazzle', 'visible');
 
             // Turn off dazzle LED after 1 second
             setTimeout(() => {
-              if (stages[currentStage].id !== 9) return;
+              if (stages[currentStage].id !== 10) return;
               ledRgb.classList.remove('dazzle', 'visible');
               // Turn off toggle switch after 1 more second
               setTimeout(() => {
-                if (stages[currentStage].id !== 9) return;
+                if (stages[currentStage].id !== 10) return;
                 dazzleCheckbox.checked = false;
               }, 1000);
             }, 1000);
@@ -1716,24 +2045,24 @@ function updateStage() {
         }, 500);
       }
 
-      // Update status and animate for stages 11 and 13
-      if (stage.id === 11 || stage.id === 13) {
+      // Update status and animate for stages 12 and 15
+      if (stage.id === 12 || stage.id === 15) {
         stopMorseAnimation();
         statusEl.textContent = 'Playing...';
-        if (stage.id === 11) {
-          // Animate play button press for stage 11
+        if (stage.id === 12) {
+          // Animate play button press for stage 12
           setTimeout(() => {
-            if (stages[currentStage].id !== 11) return;
+            if (stages[currentStage].id !== 12) return;
             playBtn.classList.add('pressing');
             setTimeout(() => {
-              if (stages[currentStage].id !== 11) return;
+              if (stages[currentStage].id !== 12) return;
               playBtn.classList.remove('pressing');
               // Start SOS Morse code animation
               playSosMorse();
             }, 300);
           }, 500);
         } else {
-          // Start SOS immediately for stage 13
+          // Start SOS immediately for stage 15
           playSosMorse();
         }
       } else {
@@ -1743,35 +2072,50 @@ function updateStage() {
       break;
     case 'help':
       mainUI.classList.add('visible');
-      // Start SOS animation for step 12
+      // Start SOS animation for step 13
       stopMorseAnimation();
       statusEl.textContent = 'Playing...';
       playSosMorse();
       const backLink = document.querySelector('#help-overlay .back');
       // Animate help button press then show overlay
       setTimeout(() => {
-        if (stages[currentStage].id !== 12) return;
+        if (stages[currentStage].id !== 13) return;
         helpBtn.classList.add('pressing');
         setTimeout(() => {
-          if (stages[currentStage].id !== 12) return;
+          if (stages[currentStage].id !== 13) return;
           helpBtn.classList.remove('pressing');
           helpOverlay.classList.add('visible');
           // After viewing help, animate back link press
           setTimeout(() => {
-            if (stages[currentStage].id !== 12) return;
+            if (stages[currentStage].id !== 13) return;
             backLink.classList.add('pressing');
             setTimeout(() => {
-              if (stages[currentStage].id !== 12) return;
+              if (stages[currentStage].id !== 13) return;
               backLink.classList.remove('pressing');
               helpOverlay.classList.add('closing');
               setTimeout(() => {
-                if (stages[currentStage].id !== 12) return;
+                if (stages[currentStage].id !== 13) return;
                 helpOverlay.classList.remove('visible', 'closing');
               }, 600);
             }, 500);
           }, 3000);
         }, 500);
       }, 1500);
+      break;
+    case 'ota':
+      mainUI.classList.add('visible');
+      const otaModal = document.getElementById('ota-modal');
+      const settingsBtn = document.getElementById('settings-btn');
+      // Animate settings button press then show OTA modal
+      setTimeout(() => {
+        if (stages[currentStage].id !== 14) return;
+        settingsBtn.classList.add('pressing');
+        setTimeout(() => {
+          if (stages[currentStage].id !== 14) return;
+          settingsBtn.classList.remove('pressing');
+          otaModal.classList.add('visible');
+        }, 300);
+      }, 500);
       break;
   }
 }
