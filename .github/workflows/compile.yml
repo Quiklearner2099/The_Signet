@@ -1,0 +1,37 @@
+name: Compile Firmware
+
+on:
+  pull_request:
+    paths:
+      - '**.ino'
+      - '**.h'
+      - '**.cpp'
+  push:
+    branches: [main]
+    paths:
+      - '**.ino'
+      - '**.h'
+      - '**.cpp'
+
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Arduino CLI
+        uses: arduino/setup-arduino-cli@v2
+
+      - name: Install ESP32 Core
+        run: |
+          arduino-cli core update-index
+          arduino-cli core install esp32:esp32
+
+      - name: Install Libraries
+        run: |
+          arduino-cli lib install "FastLED"
+          arduino-cli lib install "ArduinoJson"
+
+      - name: Compile Firmware
+        run: |
+          arduino-cli compile --fqbn esp32:esp32:XIAO_ESP32C6 The_Signet.ino
