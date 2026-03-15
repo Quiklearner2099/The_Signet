@@ -1,8 +1,8 @@
 /*
   ===================================================================================
   The Signet Morse Beacon
-  Version: 1.3.0
-  Release Date: March 3, 2026
+  Version: 1.3.1
+  Release Date: March 15, 2026
   ===================================================================================
 
   DESCRIPTION:
@@ -42,6 +42,11 @@
   ===================================================================================
   VERSION HISTORY:
   ===================================================================================
+  v1.3.1 (March 15, 2026) - Security hardening: OTA combination lock - 4-digit code
+                              displayed via RGB LED (Red/Green/Blue/Yellow blinks) required
+                              before firmware upload. Rate limiting with exponential backoff,
+                              hard lockout after 5 failed attempts, 3-minute code expiry.
+                              OTA serial debug gated behind OTA_DEBUG preprocessor flag.
   v1.3.0 (March 3, 2026) - Security hardening: OTA combination lock - 3-digit code
                               displayed via RGB LED (Red/Green/Blue blinks) required
                               before firmware upload. MAC address locking - first client
@@ -50,7 +55,7 @@
                               secondary device WiFi access). Locked MAC cleared from RAM
                               after AP shutdown (anti-forensics). True stateless design:
                               removed NVS language persistence, language modal shows on
-                              every boot. Zero bytes persisted to flash.
+                              every boot. Zero bytes persisted to flash.                            
   v1.2.1 (February 26, 2026) - Added UI language options for UI. English (default), French,
                               Spanish, Russian, Traditional Chinese, Simplified Chinese, Arabic and Farsi.
                               *** ITU Morse code is still implemented ***
@@ -110,8 +115,8 @@
 SET_LOOP_TASK_STACK_SIZE(32 * 1024);
 
 // -------------------- Version Information --------------------
-#define FIRMWARE_VERSION "1.3.0"
-#define FIRMWARE_DATE    "March 3, 2026"
+#define FIRMWARE_VERSION "1.3.1"
+#define FIRMWARE_DATE    "March 15, 2026"
 
 // -------------------- Forward Declarations --------------------
 enum Mode     { DISCREET = 0, VISIBLE = 1 };
@@ -276,10 +281,32 @@ struct AppState {
 static uint8_t lockedMac[6] = {0};
 static bool macLocked = false;
 
+// -------------------- Security: OTA Debug Gating --------------------
+// Uncomment to enable OTA serial debug output (SECURITY: code printed in plaintext!)
+// #define OTA_DEBUG
+#ifdef OTA_DEBUG
+  #define OTA_LOG(fmt, ...) Serial.printf(fmt, ##__VA_ARGS__)
+  #define OTA_LOGLN(msg)    Serial.println(msg)
+#else
+  #define OTA_LOG(fmt, ...)
+  #define OTA_LOGLN(msg)
+#endif
+
 // -------------------- Security: OTA Combination Lock --------------------
-// 3-digit code (1-9 each) displayed via RGB LED blinks
-static uint8_t otaCode[3] = {0, 0, 0};
+// 4-digit code (1-9 each) displayed via RGB LED blinks (R, G, B, Y)
+static const uint8_t OTA_CODE_LEN = 4;
+static uint8_t otaCode[OTA_CODE_LEN] = {0};
 static bool otaCodeValid = false;
+static unsigned long otaCodeGeneratedAt = 0;
+static const unsigned long OTA_CODE_TTL_MS = 180000UL;  // 3 minutes
+
+// Rate limiting / lockout
+static uint8_t otaFailCount = 0;
+static unsigned long otaLastFailTime = 0;
+static bool otaHardLocked = false;
+static unsigned long otaRetryAfterMs = 0;
+static const uint8_t OTA_MAX_ATTEMPTS = 5;
+static const unsigned long OTA_BACKOFF_BASE_MS = 1000UL;
 
 String getTextCopy() {
   String copy;
@@ -432,29 +459,31 @@ bool checkMacLock() {
 }
 
 // -------------------- Security: OTA Combination Lock -------
-// Generate random 3-digit code (1-9 each)
+// Generate random 4-digit code (1-9 each)
+// Note: Must be called with otaMutex held (called from handleOtaCode which acquires it)
 void generateOtaCode() {
-  for (int i = 0; i < 3; i++) {
+  for (int i = 0; i < OTA_CODE_LEN; i++) {
     otaCode[i] = (esp_random() % 9) + 1;  // 1-9
   }
   otaCodeValid = true;
-  Serial.printf("[OTA] Generated code: %d%d%d\n", otaCode[0], otaCode[1], otaCode[2]);
+  otaCodeGeneratedAt = millis();
+  OTA_LOG("[OTA] Generated code: %d%d%d%d\n", otaCode[0], otaCode[1], otaCode[2], otaCode[3]);
 }
 
-// Display OTA code via RGB LED blinks: Red=digit1, Green=digit2, Blue=digit3
-void displayOtaCodeOnLed() {
+// Display OTA code via RGB LED blinks: Red=digit1, Green=digit2, Blue=digit3, Yellow=digit4
+void displayOtaCodeOnLed(const uint8_t* code) {
   // Stop any current playback
-  bool wasPlaying = state.playing.load();
+  bool wasPlaying = state.playing;
   state.playing = false;
   delay(200);
   allOff();
 
-  // Blink pattern: Red for digit 1, Green for digit 2, Blue for digit 3
-  CRGB colors[3] = {CRGB(255,0,0), CRGB(0,255,0), CRGB(0,0,255)};
+  // Blink pattern: Red, Green, Blue, Yellow for digits 1-4
+  CRGB colors[OTA_CODE_LEN] = {CRGB(255,0,0), CRGB(0,255,0), CRGB(0,0,255), CRGB(255,255,0)};
 
-  for (int digit = 0; digit < 3; digit++) {
+  for (int digit = 0; digit < OTA_CODE_LEN; digit++) {
     delay(500);  // Pause between digits
-    for (int blink = 0; blink < otaCode[digit]; blink++) {
+    for (int blink = 0; blink < code[digit]; blink++) {
       leds[0] = colors[digit];
       FastLED.setBrightness(200);
       FastLED.show();
@@ -473,15 +502,23 @@ void displayOtaCodeOnLed() {
 }
 
 // Verify OTA code - invalidates after successful use
-bool verifyOtaCode(uint8_t d1, uint8_t d2, uint8_t d3) {
+// Note: Must be called with otaMutex held (called from handleOtaUpload which acquires it)
+bool verifyOtaCode(uint8_t d1, uint8_t d2, uint8_t d3, uint8_t d4) {
   if (!otaCodeValid) return false;
-  bool match = (d1 == otaCode[0] && d2 == otaCode[1] && d3 == otaCode[2]);
+  // Check TTL expiry
+  if ((millis() - otaCodeGeneratedAt) > OTA_CODE_TTL_MS) {
+    otaCodeValid = false;
+    memset(otaCode, 0, OTA_CODE_LEN);
+    OTA_LOGLN("[OTA] Code expired");
+    return false;
+  }
+  bool match = (d1 == otaCode[0] && d2 == otaCode[1] && d3 == otaCode[2] && d4 == otaCode[3]);
   if (match) {
     otaCodeValid = false;  // Invalidate after successful use
-    Serial.println("[OTA] Code verified successfully");
+    OTA_LOGLN("[OTA] Code verified successfully");
   } else {
-    Serial.printf("[OTA] Code verification failed: got %d%d%d, expected %d%d%d\n",
-                  d1, d2, d3, otaCode[0], otaCode[1], otaCode[2]);
+    OTA_LOG("[OTA] Code verification failed: got %d%d%d%d, expected %d%d%d%d\n",
+                  d1, d2, d3, d4, otaCode[0], otaCode[1], otaCode[2], otaCode[3]);
   }
   return match;
 }
@@ -794,8 +831,9 @@ input:checked + .slider:before{transform:translateX(20px);background:#111}
         <input type="number" id="otaD1" min="1" max="9" style="width:45px;height:45px;text-align:center;font-size:22px;border-radius:6px;border:2px solid #ff4444;background:#331111;color:#ff6666">
         <input type="number" id="otaD2" min="1" max="9" style="width:45px;height:45px;text-align:center;font-size:22px;border-radius:6px;border:2px solid #44ff44;background:#113311;color:#66ff66">
         <input type="number" id="otaD3" min="1" max="9" style="width:45px;height:45px;text-align:center;font-size:22px;border-radius:6px;border:2px solid #4444ff;background:#111133;color:#6666ff">
+        <input type="number" id="otaD4" min="1" max="9" style="width:45px;height:45px;text-align:center;font-size:22px;border-radius:6px;border:2px solid #ffff44;background:#333311;color:#ffff66">
       </div>
-      <div style="color:#888;font-size:11px;margin-top:6px;text-align:center">Watch LED: Red, Green, Blue blinks</div>
+      <div style="color:#888;font-size:11px;margin-top:6px;text-align:center">Watch LED: Red, Green, Blue, Yellow blinks</div>
     </div>
     <button class="ota-btn" id="otaUpload">Upload Firmware</button>
     <progress class="ota-progress" id="otaProgress" value="0" max="100"></progress>
@@ -1221,6 +1259,7 @@ const otaCodeSection = document.getElementById('otaCodeSection');
 const otaD1 = document.getElementById('otaD1');
 const otaD2 = document.getElementById('otaD2');
 const otaD3 = document.getElementById('otaD3');
+const otaD4 = document.getElementById('otaD4');
 
 document.getElementById('settingsBtn').addEventListener('click', () => {
   const L = LANG[currentLang];
@@ -1236,7 +1275,7 @@ document.getElementById('settingsBtn').addEventListener('click', () => {
     otaFileName.textContent = L.noFile;
     otaFileName.style.color = '#888';
     otaCodeSection.style.display = 'none';
-    otaD1.value = ''; otaD2.value = ''; otaD3.value = '';
+    otaD1.value = ''; otaD2.value = ''; otaD3.value = ''; otaD4.value = '';
     buildLangSelect();
   }
 });
@@ -1256,8 +1295,9 @@ otaGetCode.addEventListener('click', async () => {
     if (resp.ok) {
       otaCodeSection.style.display = 'block';
       otaStatus.textContent = 'Enter the code shown on LED';
-      otaD1.value = ''; otaD2.value = ''; otaD3.value = '';
+      otaD1.value = ''; otaD2.value = ''; otaD3.value = ''; otaD4.value = '';
       otaD1.focus();
+      otaUpload.disabled = false;
     } else {
       const data = await resp.json();
       otaStatus.textContent = data.error || 'Failed to get code';
@@ -1273,6 +1313,7 @@ otaGetCode.addEventListener('click', async () => {
 // Auto-advance to next digit field
 otaD1.addEventListener('input', () => { if (otaD1.value.length >= 1) otaD2.focus(); });
 otaD2.addEventListener('input', () => { if (otaD2.value.length >= 1) otaD3.focus(); });
+otaD3.addEventListener('input', () => { if (otaD3.value.length >= 1) otaD4.focus(); });
 
 // Android dialog handlers
 document.getElementById('androidClose').addEventListener('click', () => {
@@ -1336,10 +1377,10 @@ otaUpload.addEventListener('click', async () => {
     return;
   }
 
-  // Validate OTA code (must be 3 digits, each 1-9)
-  const code = '' + (otaD1.value||'') + (otaD2.value||'') + (otaD3.value||'');
-  if (code.length !== 3 || !/^[1-9]{3}$/.test(code)) {
-    otaStatus.textContent = 'Enter 3-digit code first (click Get Code)';
+  // Validate OTA code (must be 4 digits, each 1-9)
+  const code = '' + (otaD1.value||'') + (otaD2.value||'') + (otaD3.value||'') + (otaD4.value||'');
+  if (code.length !== 4 || !/^[1-9]{4}$/.test(code)) {
+    otaStatus.textContent = 'Enter 4-digit code first (click Get Code)';
     otaStatus.style.color = '#ff9800';
     return;
   }
@@ -1372,10 +1413,20 @@ otaUpload.addEventListener('click', async () => {
       try {
         const resp = JSON.parse(xhr.responseText);
         if (resp.error) msg = resp.error;
+        if (resp.lockedOut) {
+          msg = 'Locked out - click Get Code for a new code';
+          otaUpload.disabled = true;
+        }
+        if (resp.retryAfterMs) {
+          const secs = Math.ceil(resp.retryAfterMs / 1000);
+          msg += ' (retry in ' + secs + 's)';
+          otaUpload.disabled = true;
+          setTimeout(() => { otaUpload.disabled = false; }, resp.retryAfterMs);
+        }
       } catch(e) {}
       otaStatus.textContent = msg;
       otaStatus.style.color = '#f44336';
-      otaUpload.disabled = false;
+      if (!otaUpload.disabled) otaUpload.disabled = false;
     }
   });
 
@@ -1763,6 +1814,7 @@ static String otaErrorMessage = "";
 const size_t OTA_MAX_SIZE = 0x140000;
 
 // Handler to generate and display OTA code via LED blinks
+// Acquires otaMutex to protect otaCode[] and rate limiting state
 void handleOtaCode() {
   noteActivity();
 
@@ -1772,9 +1824,27 @@ void handleOtaCode() {
     return;
   }
 
-  // Generate new code and display it via LED
-  generateOtaCode();
-  displayOtaCodeOnLed();
+  // Acquire mutex to protect code generation and rate limit reset
+  if (!otaMutex || xSemaphoreTake(otaMutex, pdMS_TO_TICKS(100)) != pdTRUE) {
+    server.send(503, "application/json", "{\"error\":\"busy\"}");
+    return;
+  }
+
+  // Generate new code and reset rate limiting (mutex held)
+  generateOtaCode();  // Note: called only from here, always under otaMutex
+  otaFailCount = 0;
+  otaLastFailTime = 0;
+  otaHardLocked = false;
+  otaRetryAfterMs = 0;
+
+  // Copy code before releasing mutex (avoids holding mutex during ~16s LED display)
+  uint8_t codeCopy[OTA_CODE_LEN];
+  memcpy(codeCopy, otaCode, OTA_CODE_LEN);
+
+  xSemaphoreGive(otaMutex);
+
+  // Display code on LED using local copy (no mutex needed)
+  displayOtaCodeOnLed(codeCopy);
 
   // Return success (code is NOT sent in response - must be read from LED)
   server.send(200, "application/json", "{\"ready\":true}");
@@ -1798,29 +1868,82 @@ void handleOtaUpload() {
     if (!otaMutex || xSemaphoreTake(otaMutex, pdMS_TO_TICKS(100)) != pdTRUE) {
       otaHadError = true;
       otaErrorMessage = "Update already in progress";
-      Serial.println("[OTA] Rejected: another update in progress");
+      OTA_LOGLN("[OTA] Rejected: another update in progress");
       return;
+    }
+
+    // Hard lockout check
+    if (otaHardLocked) {
+      otaHadError = true;
+      otaErrorMessage = "Locked out - generate a new code";
+      OTA_LOGLN("[OTA] Rejected: hard lockout active");
+      xSemaphoreGive(otaMutex);
+      return;
+    }
+
+    // Exponential backoff check
+    if (otaFailCount > 0) {
+      unsigned long backoffMs = OTA_BACKOFF_BASE_MS << (otaFailCount - 1);
+      unsigned long elapsed = millis() - otaLastFailTime;
+      if (elapsed < backoffMs) {
+        otaRetryAfterMs = backoffMs - elapsed;
+        otaHadError = true;
+        otaErrorMessage = "Rate limited - try again shortly";
+        OTA_LOG("[OTA] Rejected: rate limited, retry after %lu ms\n", otaRetryAfterMs);
+        xSemaphoreGive(otaMutex);
+        return;
+      }
     }
 
     // Verify OTA combination code (displayed on LED via /api/ota-code)
     String codeHeader = server.header("X-OTA-Code");
-    if (codeHeader.length() != 3) {
+    if (codeHeader.length() != OTA_CODE_LEN) {
       otaHadError = true;
       otaErrorMessage = "Missing OTA code - click Get Code first";
-      Serial.println("[OTA] Rejected: missing or invalid OTA code header");
+      OTA_LOGLN("[OTA] Rejected: missing or invalid OTA code header");
       xSemaphoreGive(otaMutex);
       return;
     }
+    // Check code expiry before verification (distinct error message)
+    if (otaCodeValid && (millis() - otaCodeGeneratedAt) > OTA_CODE_TTL_MS) {
+      otaCodeValid = false;
+      memset(otaCode, 0, OTA_CODE_LEN);
+      otaHadError = true;
+      otaErrorMessage = "Code expired - click Get Code for a new one";
+      OTA_LOGLN("[OTA] Rejected: code expired");
+      xSemaphoreGive(otaMutex);
+      return;
+    }
+
     uint8_t d1 = codeHeader[0] - '0';
     uint8_t d2 = codeHeader[1] - '0';
     uint8_t d3 = codeHeader[2] - '0';
-    if (!verifyOtaCode(d1, d2, d3)) {
-      otaHadError = true;
-      otaErrorMessage = "Invalid OTA code";
-      Serial.println("[OTA] Rejected: wrong OTA code");
+    uint8_t d4 = codeHeader[3] - '0';
+    if (!verifyOtaCode(d1, d2, d3, d4)) {
+      otaFailCount++;
+      otaLastFailTime = millis();
+      otaRetryAfterMs = 0;
+
+      if (otaFailCount >= OTA_MAX_ATTEMPTS) {
+        otaHardLocked = true;
+        otaCodeValid = false;
+        memset(otaCode, 0, OTA_CODE_LEN);
+        otaHadError = true;
+        otaErrorMessage = "Locked out - too many failed attempts";
+        OTA_LOG("[OTA] Hard lockout after %d failed attempts\n", otaFailCount);
+      } else {
+        unsigned long nextBackoff = OTA_BACKOFF_BASE_MS << (otaFailCount - 1);
+        otaRetryAfterMs = nextBackoff;
+        otaHadError = true;
+        otaErrorMessage = "Invalid OTA code";
+        OTA_LOG("[OTA] Rejected: wrong code (attempt %d/%d)\n", otaFailCount, OTA_MAX_ATTEMPTS);
+      }
       xSemaphoreGive(otaMutex);
       return;
     }
+    // Successful verification - reset fail count
+    otaFailCount = 0;
+    otaRetryAfterMs = 0;
 
     // Reset error state for new upload
     otaHadError = false;
@@ -1835,12 +1958,12 @@ void handleOtaUpload() {
     if (contentLength > OTA_MAX_SIZE) {
       otaHadError = true;
       otaErrorMessage = "Firmware too large (max 1.25MB)";
-      Serial.printf("[OTA] Rejected: size %u exceeds max %u\n", contentLength, OTA_MAX_SIZE);
+      OTA_LOG("[OTA] Rejected: size %u exceeds max %u\n", contentLength, OTA_MAX_SIZE);
       xSemaphoreGive(otaMutex);
       return;
     }
 
-    Serial.printf("[OTA] Starting: %s (%u bytes)\n", upload.filename.c_str(), contentLength);
+    OTA_LOG("[OTA] Starting: %s (%u bytes)\n", upload.filename.c_str(), contentLength);
 
     // Begin update with known size for better error detection
     if (!Update.begin(contentLength > 0 ? contentLength : UPDATE_SIZE_UNKNOWN, U_FLASH)) {
@@ -1865,7 +1988,7 @@ void handleOtaUpload() {
       if (upload.buf[0] != 0xE9) {
         otaHadError = true;
         otaErrorMessage = "Invalid firmware format";
-        Serial.println("[OTA] Rejected: invalid firmware header (not 0xE9)");
+        OTA_LOGLN("[OTA] Rejected: invalid firmware header (not 0xE9)");
         Update.abort();
         otaInProgress = false;
         if (otaMutex) xSemaphoreGive(otaMutex);
@@ -1892,10 +2015,10 @@ void handleOtaUpload() {
     }
 
     if (Update.end(true)) {
-      Serial.printf("[OTA] Success: %u bytes written\n", upload.totalSize);
+      OTA_LOG("[OTA] Success: %u bytes written\n", upload.totalSize);
       // Warn if received size doesn't match Content-Length header
       if (otaExpectedSize > 0 && otaReceivedSize != otaExpectedSize) {
-        Serial.printf("[OTA] Warning: expected %u bytes, received %u\n", otaExpectedSize, otaReceivedSize);
+        OTA_LOG("[OTA] Warning: expected %u bytes, received %u\n", otaExpectedSize, otaReceivedSize);
       }
     } else {
       otaHadError = true;
@@ -1907,7 +2030,7 @@ void handleOtaUpload() {
     if (otaMutex) xSemaphoreGive(otaMutex);
   }
   else if (upload.status == UPLOAD_FILE_ABORTED) {
-    Serial.println("[OTA] Upload aborted by client");
+    OTA_LOGLN("[OTA] Upload aborted by client");
     if (otaInProgress) {
       Update.abort();
       otaInProgress = false;
@@ -1929,11 +2052,20 @@ void handleOtaComplete() {
     } else {
       response += "Update failed";
     }
-    response += "\"}";
+    response += "\"";
+    if (otaRetryAfterMs > 0) {
+      response += ",\"retryAfterMs\":";
+      response += String(otaRetryAfterMs);
+    }
+    if (otaHardLocked) {
+      response += ",\"lockedOut\":true";
+    }
+    response += "}";
 
-    // Clear error state
+    // Clear error state (but NOT rate limiting state)
     otaHadError = false;
     otaErrorMessage = "";
+    otaRetryAfterMs = 0;
 
     server.send(400, "application/json", response);
     return;
