@@ -810,6 +810,7 @@ html, body {
 .phone-screen .ota-digit.red { border: 2px solid #ff4444; color: #ff6666; background: #331111; }
 .phone-screen .ota-digit.green { border: 2px solid #44ff44; color: #66ff66; background: #113311; }
 .phone-screen .ota-digit.blue { border: 2px solid #4444ff; color: #6666ff; background: #111133; }
+.phone-screen .ota-digit.yellow { border: 2px solid #ffff44; color: #ffff66; background: #333311; }
 
 .phone-screen .ota-hint {
   color: #888;
@@ -1571,14 +1572,14 @@ html, body {
 
             </div>
             <div class="footer"><a href="#" class="help-btn" id="help-btn">?</a><span class="footer-text">1984 was not an instruction manual</span><button class="settings-btn" id="settings-btn">&#9881;</button></div>
-            <div class="version">Firmware v1.3.0</div>
+            <div class="version">Firmware v1.3.1</div>
           </div>
 
           <!-- OTA Update modal (stage 14) -->
           <div class="ota-modal" id="ota-modal">
             <div class="ota-card">
               <h3>Firmware Update</h3>
-              <div class="ota-version">Current: v1.3.0</div>
+              <div class="ota-version">Current: v1.3.1</div>
               <button class="ota-btn" style="background:#333;color:#fff;margin-bottom:10px">Choose .bin File</button>
               <div style="text-align:center;font-size:11px;color:#888;margin-bottom:10px">No file selected</div>
               <button class="ota-btn" style="background:#1a5f2a;margin-bottom:10px">Get Code</button>
@@ -1588,8 +1589,9 @@ html, body {
                   <input type="text" class="ota-digit red" value="3" maxlength="1">
                   <input type="text" class="ota-digit green" value="7" maxlength="1">
                   <input type="text" class="ota-digit blue" value="2" maxlength="1">
+                  <input type="text" class="ota-digit yellow" value="5" maxlength="1">
                 </div>
-                <div class="ota-hint">Watch LED: Red, Green, Blue blinks</div>
+                <div class="ota-hint">Watch LED: Red, Green, Blue, Yellow blinks</div>
               </div>
               <button class="ota-btn">Upload Firmware</button>
               <button class="ota-btn" style="background:#333;color:#fff;margin-top:8px">Close</button>
@@ -1823,7 +1825,7 @@ const stages = [
       <p>Tap the <strong class="highlight">⚙ gear</strong> icon to access firmware updates.</p>
       <p><strong>Secure 3-step verification process:</strong></p>
       <p>1. Select a <strong>.bin</strong> firmware file</p>
-      <p>2. Tap <strong class="highlight">Get Code</strong> - watch the LED blink a 3-digit code (Red, Green, Blue)</p>
+      <p>2. Tap <strong class="highlight">Get Code</strong> - watch the LED blink a 4-digit code (Red, Green, Blue, Yellow)</p>
       <p>3. Enter the code in the color-coded input fields and upload</p>
       <div class="note">⚠️ <strong>NOTE:</strong> The LED code ensures only someone with physical access to the device can update firmware. This prevents unauthorized remote updates.</div>
     `
