@@ -91,7 +91,7 @@ Click [HERE](https://github.com/Quiklearner2099/The_Signet/blob/main/Documentati
 
 <div align="center">
   <a href="https://odysee.com/@the_signet:7/Signet_Build_Guide:8?r=DPS7K88vV2efrcF32mZreA2FPBWHjBPD">
-    <img src="data/build_guide_thumbnail.jpg" alt="The Signet Build Tutorial" width="560">
+    <img src="data/build_guide_thumbnail.png" alt="The Signet Build Tutorial" width="560">
   </a>
   <br>
   <strong>▶️ Click to watch on Odysee</strong>
